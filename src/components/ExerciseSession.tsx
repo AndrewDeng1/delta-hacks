@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Camera, CameraOff, Trophy, Zap, X } from 'lucide-react';
+import { Camera, CameraOff, Trophy, Zap, X, Check, AlertCircle } from 'lucide-react';
+import { setTargetExercise, getRepCounts, checkBackendAvailability } from '@/api/exercise';
+import { toast } from 'sonner';
 
 interface ExerciseSessionProps {
   challenge: Challenge;
@@ -21,6 +23,8 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
     high_knees: 0,
   });
   const [popExercise, setPopExercise] = useState<ExerciseType | null>(null);
+  const [selectedExercise, setSelectedExercise] = useState<ExerciseType | null>(null);
+  const [backendAvailable, setBackendAvailable] = useState(true);
 
   // Calculate session contributions
   const calculateSessionContributions = () => {
@@ -34,13 +38,45 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
     return total;
   };
 
+  // Calculate community total reps for an exercise
+  const getCommunityReps = (exercise: ExerciseType) => {
+    return Object.values(challenge.userContributions).reduce(
+      (sum, userReps) => sum + (userReps[exercise] || 0), 0
+    );
+  };
+
+  // Calculate community total contributions
+  const getCommunityContributions = () => {
+    let total = 0;
+    for (const exercise of challenge.enabledExercises) {
+      const communityReps = getCommunityReps(exercise);
+      const reward = challenge.repReward[exercise];
+      if (reward) {
+        total += Math.floor(communityReps / reward.perReps) * reward.amount;
+      }
+    }
+    return total;
+  };
+
   // Calculate overall challenge progress per exercise
   const getExerciseProgress = (exercise: ExerciseType) => {
-    const totalReps = Object.values(challenge.userContributions).reduce(
-      (sum, userReps) => sum + (userReps[exercise] || 0), 0
-    ) + sessionReps[exercise];
+    const totalReps = getCommunityReps(exercise) + sessionReps[exercise];
     const goal = challenge.repGoal[exercise];
     return goal > 0 ? Math.min((totalReps / goal) * 100, 100) : 0;
+  };
+
+  // Handle exercise selection
+  const handleExerciseSelect = async (exercise: ExerciseType) => {
+    try {
+      setSelectedExercise(exercise);
+      await setTargetExercise(exercise);
+      console.log(`[Exercise Select] Set target to: ${exercise}`);
+      toast.success(`Now tracking: ${EXERCISE_LABELS[exercise]}`);
+    } catch (error) {
+      console.error('Failed to set target exercise:', error);
+      toast.error('Failed to set exercise. Please try again.');
+      setSelectedExercise(null);
+    }
   };
 
   // Start camera
@@ -53,6 +89,7 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
       }
     } catch (error) {
       console.error('Camera access denied:', error);
+      toast.error('Failed to access camera');
     }
   };
 
@@ -66,25 +103,88 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
     }
   };
 
-  // Simulate exercise detection (in production, this would come from backend)
+  // Reset backend counter and set default exercise on mount
   useEffect(() => {
-    if (!cameraActive) return;
+    const initialize = async () => {
+      // Reset backend rep counter
+      try {
+        console.log('[Init] Resetting backend rep counter...');
+        await getRepCounts(); // This fetches and resets the counter
+        console.log('[Init] Backend rep counter reset');
+      } catch (error) {
+        console.error('[Init] Failed to reset rep counter:', error);
+      }
 
-    const interval = setInterval(() => {
-      const exerciseIndex = Math.floor(Math.random() * challenge.enabledExercises.length);
-      const exercise = challenge.enabledExercises[exerciseIndex];
-      
-      setSessionReps(prev => ({
-        ...prev,
-        [exercise]: prev[exercise] + 1,
-      }));
-      
-      setPopExercise(exercise);
-      setTimeout(() => setPopExercise(null), 300);
-    }, 1500);
+      // Check backend availability
+      const available = await checkBackendAvailability();
+      setBackendAvailable(available);
+
+      // Set default exercise to first enabled exercise
+      if (challenge.enabledExercises.length > 0) {
+        const defaultExercise = challenge.enabledExercises[0];
+        console.log(`[Init] Setting default exercise to: ${defaultExercise}`);
+
+        try {
+          setSelectedExercise(defaultExercise);
+          await setTargetExercise(defaultExercise);
+          console.log(`[Init] Successfully set target to: ${defaultExercise}`);
+          toast.success(`Tracking: ${EXERCISE_LABELS[defaultExercise]}`);
+        } catch (error) {
+          console.error('[Init] Failed to set default exercise:', error);
+        }
+      }
+    };
+
+    initialize();
+
+    // Recheck backend availability every 5 seconds
+    const interval = setInterval(async () => {
+      const available = await checkBackendAvailability();
+      setBackendAvailable(available);
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [cameraActive, challenge.enabledExercises]);
+  }, [challenge.enabledExercises]);
+
+  // Poll backend for real rep counts
+  useEffect(() => {
+    if (!cameraActive || !selectedExercise) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const repCounts = await getRepCounts();
+        console.log('[Polling] Received rep counts:', repCounts);
+
+        // Process increments for all exercises
+        Object.entries(repCounts).forEach(([exercise, count]) => {
+          if (count > 0) {
+            console.log(`[Polling] ${exercise}: received count = ${count}`);
+
+            if (challenge.enabledExercises.includes(exercise as ExerciseType)) {
+              // Update session reps
+              setSessionReps(prev => {
+                const oldValue = prev[exercise] || 0;
+                const newValue = oldValue + count;
+                console.log(`[Polling] ${exercise}: ${oldValue} + ${count} = ${newValue}`);
+                return {
+                  ...prev,
+                  [exercise]: newValue
+                };
+              });
+
+              // Show animation feedback
+              setPopExercise(exercise as ExerciseType);
+              setTimeout(() => setPopExercise(null), 1000);
+            }
+          }
+        });
+      } catch (error) {
+        console.error('Failed to fetch rep counts:', error);
+      }
+    }, 500); // Poll every 500ms
+
+    return () => clearInterval(pollInterval);
+  }, [cameraActive, selectedExercise, challenge.enabledExercises]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -100,6 +200,7 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
   };
 
   const sessionContributions = calculateSessionContributions();
+  const communityContributions = getCommunityContributions();
 
   return (
     <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto">
@@ -115,9 +216,29 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
           </Button>
         </div>
 
+        {/* Backend Unavailable Warning */}
+        {!backendAvailable && (
+          <Card className="border-destructive bg-destructive/10 mb-6">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-destructive mb-1">Backend Unavailable</p>
+                  <p className="text-sm text-muted-foreground">
+                    Please ensure the motion detection script is running.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2 font-mono">
+                    Run: <code className="bg-muted px-1 py-0.5 rounded">python3 backend/script.py</code>
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Video Feed */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-4">
             <Card className="overflow-hidden">
               <CardContent className="p-0">
                 <div className="relative aspect-video bg-muted">
@@ -139,13 +260,13 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
                       </Button>
                     </div>
                   )}
-                  
+
                   {/* Live Stats Overlay */}
-                  {cameraActive && (
+                  {cameraActive && selectedExercise && (
                     <div className="absolute top-4 left-4 right-4 flex justify-between">
-                      <Badge className="gradient-energy text-energy-foreground text-lg px-4 py-2 gap-2">
-                        <Trophy className="h-4 w-4" />
-                        {sessionContributions} {challenge.repRewardType}
+                      <Badge className="bg-green-500 text-white text-lg px-4 py-2 gap-2">
+                        <Check className="h-4 w-4" />
+                        {EXERCISE_LABELS[selectedExercise]}
                       </Badge>
                       <Badge className="bg-destructive text-destructive-foreground text-lg px-4 py-2">
                         <Zap className="h-4 w-4 mr-1" />
@@ -157,8 +278,41 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
               </CardContent>
             </Card>
 
+            {/* Exercise Selection - Horizontal Buttons */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">Select Exercise</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex justify-center gap-2">
+                  {challenge.enabledExercises.map((exercise) => (
+                    <button
+                      key={exercise}
+                      onClick={() => handleExerciseSelect(exercise)}
+                      disabled={!backendAvailable}
+                      className={`px-4 py-2 rounded-lg border-2 transition-all ${
+                        selectedExercise === exercise
+                          ? 'bg-green-500 border-green-600 text-white'
+                          : 'bg-background border-border hover:border-green-400 disabled:opacity-50 disabled:cursor-not-allowed'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{EXERCISE_ICONS[exercise]}</span>
+                        <span className="font-semibold text-sm">
+                          {EXERCISE_LABELS[exercise]}
+                        </span>
+                        {selectedExercise === exercise && (
+                          <Check className="h-4 w-4" />
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Camera Controls */}
-            <div className="flex justify-center gap-4 mt-4">
+            <div className="flex justify-center gap-4">
               {cameraActive ? (
                 <>
                   <Button variant="outline" onClick={stopCamera}>
@@ -180,30 +334,102 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
 
           {/* Session Stats */}
           <div className="space-y-4">
-            {/* Session Reps */}
+            {/* Session Stats Card */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Session Reps</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Session Stats</CardTitle>
+                  <Badge variant="outline" className="bg-primary/10">This Session</Badge>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Session Reps */}
                 {challenge.enabledExercises.map((exercise) => (
-                  <div 
+                  <div
                     key={exercise}
-                    className={`p-4 rounded-lg bg-muted transition-all duration-300 ${
+                    className={`p-3 rounded-lg bg-muted transition-all duration-300 ${
                       popExercise === exercise ? 'animate-counter-pop scale-105 bg-primary/20' : ''
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-2xl">{EXERCISE_ICONS[exercise]}</span>
-                        <span className="font-medium">{EXERCISE_LABELS[exercise]}</span>
+                        <span className="text-xl">{EXERCISE_ICONS[exercise]}</span>
+                        <span className="font-medium text-sm">{EXERCISE_LABELS[exercise]}</span>
                       </div>
-                      <span className="font-display text-3xl font-bold text-primary">
+                      <span className="font-display text-2xl font-bold text-primary">
                         {sessionReps[exercise]}
                       </span>
                     </div>
                   </div>
                 ))}
+
+                {/* Session Contribution */}
+                <div className="pt-3 border-t">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Session Contribution</span>
+                    <span className="font-display text-xl font-bold text-gradient">
+                      {sessionContributions} {challenge.repRewardType}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Community Stats Card */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Community Total</CardTitle>
+                  <Badge variant="outline">All Time</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Community Reps */}
+                {challenge.enabledExercises.map((exercise) => {
+                  const communityReps = getCommunityReps(exercise);
+                  const totalWithSession = communityReps + sessionReps[exercise];
+
+                  return (
+                    <div key={exercise} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">{EXERCISE_ICONS[exercise]}</span>
+                          <span className="font-medium text-sm">{EXERCISE_LABELS[exercise]}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-display text-xl font-bold">
+                            {totalWithSession}
+                          </div>
+                          {sessionReps[exercise] > 0 && (
+                            <div className="text-xs text-green-600">
+                              +{sessionReps[exercise]} this session
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Community Contribution */}
+                <div className="pt-3 border-t">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total Contribution</span>
+                    <div className="text-right">
+                      <div className="font-display text-xl font-bold text-gradient">
+                        {communityContributions + sessionContributions}
+                      </div>
+                      {sessionContributions > 0 && (
+                        <div className="text-xs text-green-600">
+                          +{sessionContributions} this session
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground">
+                        {challenge.repRewardType}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
@@ -216,9 +442,7 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
                 {challenge.enabledExercises.map((exercise) => {
                   const progress = getExerciseProgress(exercise);
                   const goal = challenge.repGoal[exercise];
-                  const current = Object.values(challenge.userContributions).reduce(
-                    (sum, userReps) => sum + (userReps[exercise] || 0), 0
-                  ) + sessionReps[exercise];
+                  const current = getCommunityReps(exercise) + sessionReps[exercise];
 
                   return (
                     <div key={exercise}>
@@ -230,20 +454,6 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
                     </div>
                   );
                 })}
-              </CardContent>
-            </Card>
-
-            {/* Contribution Info */}
-            <Card className="gradient-card border-primary/20">
-              <CardContent className="pt-6">
-                <div className="text-center">
-                  <Trophy className="h-8 w-8 mx-auto text-primary mb-2" />
-                  <p className="text-sm text-muted-foreground mb-1">Session Contribution</p>
-                  <p className="font-display text-4xl font-bold text-gradient">
-                    {sessionContributions}
-                  </p>
-                  <p className="text-lg text-muted-foreground">{challenge.repRewardType}</p>
-                </div>
               </CardContent>
             </Card>
           </div>

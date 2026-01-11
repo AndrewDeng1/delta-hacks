@@ -607,14 +607,18 @@ def process_reps():
     try:
         rep_file_path = os.path.join(os.path.dirname(__file__), "rep_counter.json")
 
-        # Read current counts
-        with open(rep_file_path, 'r') as f:
+        # Read current counts and immediately reset in one atomic operation
+        with open(rep_file_path, 'r+') as f:
             counts = json.load(f)
+            app.logger.info(f"[/reps/process] Read counts: {counts}")
 
-        # Reset to 0
-        reset_counts = {k: 0 for k in counts.keys()}
-        with open(rep_file_path, 'w') as f:
+            # Reset to 0
+            reset_counts = {k: 0 for k in counts.keys()}
+            f.seek(0)
+            f.truncate()
             json.dump(reset_counts, f, indent=2)
+
+        app.logger.info(f"[/reps/process] Returning: {counts} (file reset to 0)")
 
         return jsonify(counts)
 

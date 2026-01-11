@@ -334,6 +334,8 @@ class ExerciseDetector:
 
         # Increment counter if rep completed
         if rep_completed:
+            # Reload counts from file first to pick up any resets from backend
+            self.load_counts()
             self.rep_counts[self.target_exercise.value] += 1
 
             # Use shorter cooldown for high knees (rapid alternating movement)
