@@ -630,7 +630,7 @@ def process_reps():
 @app.route('/challenges/<challenge_id>/contributions/increment', methods=['POST'])
 @verify_token_decorator
 def increment_contributions(challenge_id):
-    """Atomically increment user contributions for a challenge"""
+    """Atomically increment user contributions for a challenge and check for completion"""
     try:
         # Get user_id from JWT token (authenticated user)
         user_id = request.user_id
@@ -641,16 +641,35 @@ def increment_contributions(challenge_id):
 
         increments = data['increments']
 
-        # Build atomic increment update
+        # Get challenge to check enabled exercises
+        challenge = challenges_collection.find_one({"_id": ObjectId(challenge_id)})
+        if not challenge:
+            return jsonify({'error': 'Challenge not found'}), 404
+
+        enabled_exercises = challenge.get('enabledExercises', [])
+
+        # Build atomic increment update - only for enabled exercises
         update_doc = {}
         applied_increments = {}
+        ignored_exercises = {}
+
         for exercise, count in increments.items():
             if count > 0:  # Only increment positive values
-                update_doc[f"contributions.{user_id}.{exercise}"] = count
-                applied_increments[exercise] = count
+                if exercise in enabled_exercises:
+                    # Exercise is enabled for this challenge
+                    update_doc[f"contributions.{user_id}.{exercise}"] = count
+                    applied_increments[exercise] = count
+                else:
+                    # Exercise not enabled for this challenge - ignore it
+                    ignored_exercises[exercise] = count
+                    print(f"⚠ Ignoring {exercise} for challenge {challenge_id} - not enabled")
 
         if not update_doc:
-            return jsonify({'increments': {}})
+            return jsonify({
+                'increments': {},
+                'ignored': ignored_exercises,
+                'message': 'No valid exercises for this challenge'
+            })
 
         # Atomic increment
         challenges_collection.update_one(
@@ -658,7 +677,43 @@ def increment_contributions(challenge_id):
             {"$inc": update_doc}
         )
 
-        return jsonify({'increments': applied_increments})
+        print(f"✓ Incremented contributions for challenge {challenge_id}: {applied_increments}")
+        if ignored_exercises:
+            print(f"  Ignored exercises: {ignored_exercises}")
+
+        # Check if challenge goals have been met (re-fetch to get updated contributions)
+        challenge = challenges_collection.find_one({"_id": ObjectId(challenge_id)})
+        if not challenge.get('completed', False):
+            rep_goal = challenge.get('repGoal', {})
+            contributions = challenge.get('contributions', {})
+
+            # Calculate total reps for each exercise
+            total_reps = {}
+            for user_contributions in contributions.values():
+                for exercise, reps in user_contributions.items():
+                    total_reps[exercise] = total_reps.get(exercise, 0) + reps
+
+            # Check if all exercise goals are met
+            all_goals_met = True
+            for exercise, goal in rep_goal.items():
+                if total_reps.get(exercise, 0) < goal:
+                    all_goals_met = False
+                    break
+
+            # If all goals met, mark challenge as completed
+            if all_goals_met:
+                challenges_collection.update_one(
+                    {"_id": ObjectId(challenge_id)},
+                    {"$set": {"completed": True}}
+                )
+                print(f"✓ Challenge {challenge_id} marked as completed! All goals met.")
+
+        response_data = {'increments': applied_increments}
+        if ignored_exercises:
+            response_data['ignored'] = ignored_exercises
+            response_data['message'] = f"Some exercises were not counted (not enabled for this challenge)"
+
+        return jsonify(response_data)
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

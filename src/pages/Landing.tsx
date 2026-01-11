@@ -1,9 +1,96 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { TreePine, Waves, Heart, Users, Trophy, Zap, ArrowRight } from 'lucide-react';
+import { challengeAPI } from '@/lib/api';
+import { Challenge } from '@/types';
 
 export default function Landing() {
+  const [activeChallenges, setActiveChallenges] = useState<Challenge[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch active challenges
+  useEffect(() => {
+    const fetchChallenges = async () => {
+      try {
+        const response = await challengeAPI.getAllChallenges();
+
+        // Transform and filter to active challenges
+        const now = new Date();
+        const transformedChallenges: Challenge[] = [];
+
+        response.challenges.forEach((apiChallenge) => {
+          try {
+            // Handle repReward transformation
+            const repReward: any = {};
+            Object.entries(apiChallenge.repReward).forEach(([key, value]) => {
+              if (Array.isArray(value)) {
+                repReward[key] = { amount: value[0], perReps: value[1] };
+              } else {
+                repReward[key] = { amount: value as number, perReps: 1 };
+              }
+            });
+
+            const transformed: Challenge = {
+              id: apiChallenge._id,
+              name: apiChallenge.name,
+              creatorId: apiChallenge.creatorUserId,
+              creatorName: 'User',
+              description: apiChallenge.description,
+              enabledExercises: apiChallenge.enabledExercises as any,
+              userContributions: apiChallenge.contributions,
+              enrolledUsers: apiChallenge.participants,
+              repGoal: apiChallenge.repGoal as any,
+              repReward: repReward,
+              repRewardType: Object.values(apiChallenge.repRewardType)[0] || 'trees planted',
+              completionReward: apiChallenge.completionReward,
+              startDate: new Date(apiChallenge.startDate),
+              endDate: new Date(apiChallenge.endDate),
+              isCompleted: apiChallenge.completed,
+            };
+
+            // Only include active challenges
+            if (!transformed.isCompleted && now <= transformed.endDate) {
+              transformedChallenges.push(transformed);
+            }
+          } catch (error) {
+            console.error('Failed to transform challenge:', error);
+          }
+        });
+
+        // Take only first 3 active challenges
+        setActiveChallenges(transformedChallenges.slice(0, 3));
+      } catch (error) {
+        console.error('Failed to fetch challenges:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchChallenges();
+  }, []);
+
+  // Calculate progress for a challenge
+  const calculateProgress = (challenge: Challenge) => {
+    const totalReps = Object.values(challenge.userContributions).reduce((sum, userReps) => {
+      return sum + Object.values(userReps).reduce((s, r) => s + r, 0);
+    }, 0);
+    const totalGoal = Object.values(challenge.repGoal).reduce((s, g) => s + g, 0);
+    return totalGoal > 0 ? Math.min((totalReps / totalGoal) * 100, 100) : 0;
+  };
+
+  // Format reward display
+  const formatReward = (challenge: Challenge) => {
+    // Get first enabled exercise reward as representative
+    const firstExercise = challenge.enabledExercises[0];
+    const reward = challenge.repReward[firstExercise];
+    if (reward) {
+      return `${reward.amount} ${challenge.repRewardType} / ${reward.perReps} reps`;
+    }
+    return challenge.repRewardType;
+  };
+
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -130,31 +217,62 @@ export default function Landing() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
-            {[
-              { title: 'Plant a Forest', reward: '1 tree / 50 reps', enrolled: 234, progress: 67 },
-              { title: 'Clean Ocean Challenge', reward: '1 lb waste / 20 reps', enrolled: 156, progress: 45 },
-              { title: 'Charity Fitness Drive', reward: '$1 / 50 reps', enrolled: 312, progress: 23 },
-            ].map((challenge, index) => (
-              <Card key={index} className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
-                <CardContent className="pt-6">
-                  <h3 className="font-display text-xl font-semibold mb-2">{challenge.title}</h3>
-                  <div className="flex items-center gap-2 text-sm text-primary font-medium mb-4">
-                    <Trophy className="h-4 w-4" />
-                    {challenge.reward}
-                  </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden mb-3">
-                    <div 
-                      className="h-full gradient-hero rounded-full transition-all duration-500"
-                      style={{ width: `${challenge.progress}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>{challenge.enrolled} enrolled</span>
-                    <span>{challenge.progress}% complete</span>
-                  </div>
+            {loading ? (
+              // Loading skeleton
+              [1, 2, 3].map((i) => (
+                <Card key={i} className="animate-pulse">
+                  <CardContent className="pt-6">
+                    <div className="h-6 bg-muted rounded mb-2" />
+                    <div className="h-4 bg-muted rounded w-2/3 mb-4" />
+                    <div className="h-2 bg-muted rounded mb-3" />
+                    <div className="flex justify-between">
+                      <div className="h-4 bg-muted rounded w-20" />
+                      <div className="h-4 bg-muted rounded w-16" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : activeChallenges.length > 0 ? (
+              // Real challenges
+              activeChallenges.map((challenge) => {
+                const progress = calculateProgress(challenge);
+                return (
+                  <Link key={challenge.id} to={`/challenges/${challenge.id}`}>
+                    <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 h-full">
+                      <CardContent className="pt-6">
+                        <h3 className="font-display text-xl font-semibold mb-2">{challenge.name}</h3>
+                        <div className="flex items-center gap-2 text-sm text-primary font-medium mb-4">
+                          <Trophy className="h-4 w-4" />
+                          {formatReward(challenge)}
+                        </div>
+                        <div className="h-2 rounded-full bg-muted overflow-hidden mb-3">
+                          <div
+                            className="h-full gradient-hero rounded-full transition-all duration-500"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-sm text-muted-foreground">
+                          <span>{challenge.enrolledUsers.length} enrolled</span>
+                          <span>{Math.round(progress)}% complete</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })
+            ) : (
+              // No challenges fallback
+              <Card className="md:col-span-3">
+                <CardContent className="pt-6 text-center py-12">
+                  <Trophy className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <h3 className="font-display text-xl font-semibold mb-2">No Active Challenges</h3>
+                  <p className="text-muted-foreground mb-4">Be the first to create a challenge!</p>
+                  <Link to="/create-challenge">
+                    <Button variant="hero">Create Challenge</Button>
+                  </Link>
                 </CardContent>
               </Card>
-            ))}
+            )}
           </div>
         </div>
       </section>

@@ -35,29 +35,65 @@ export function ChallengeCard({ challenge, userEnrolled, onEnroll, onLeave }: Ch
   const isPast = now > challenge.endDate || challenge.isCompleted;
   const isUpcoming = now < challenge.startDate;
 
-  // Calculate total progress
+  // Calculate total progress (capped at goal)
   const totalReps = Object.values(challenge.userContributions).reduce((sum, userReps) => {
     return sum + Object.values(userReps).reduce((s, r) => s + r, 0);
   }, 0);
   const totalGoal = Object.values(challenge.repGoal).reduce((s, g) => s + g, 0);
-  const progressPercent = totalGoal > 0 ? Math.min((totalReps / totalGoal) * 100, 100) : 0;
+  const cappedReps = Math.min(totalReps, totalGoal);
+  const progressPercent = totalGoal > 0 ? Math.min((cappedReps / totalGoal) * 100, 100) : 0;
 
-  // Calculate contributions made
+  // Check if goals were met (for past challenges)
+  const checkGoalsMet = () => {
+    if (!isPast) return null;
+
+    for (const exercise of challenge.enabledExercises) {
+      const exerciseReps = Object.values(challenge.userContributions).reduce(
+        (sum, userReps) => sum + (userReps[exercise] || 0), 0
+      );
+      const exerciseGoal = challenge.repGoal[exercise];
+      if (exerciseReps < exerciseGoal) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const goalsMet = checkGoalsMet();
+
+  // Calculate contributions made (based on capped reps)
   const calculateContributions = () => {
     let total = 0;
     for (const exercise of challenge.enabledExercises) {
       const totalExerciseReps = Object.values(challenge.userContributions).reduce(
         (sum, userReps) => sum + (userReps[exercise] || 0), 0
       );
+      // Cap reps at goal for contribution calculation
+      const goal = challenge.repGoal[exercise];
+      const cappedExerciseReps = Math.min(totalExerciseReps, goal);
       const reward = challenge.repReward[exercise];
       if (reward) {
-        total += Math.floor(totalExerciseReps / reward.perReps) * reward.amount;
+        total += Math.floor(cappedExerciseReps / reward.perReps) * reward.amount;
+      }
+    }
+    return total;
+  };
+
+  // Calculate maximum possible contributions if all goals are met
+  const calculateMaxContributions = () => {
+    let total = 0;
+    for (const exercise of challenge.enabledExercises) {
+      const goal = challenge.repGoal[exercise];
+      const reward = challenge.repReward[exercise];
+      if (reward && goal > 0) {
+        total += Math.floor(goal / reward.perReps) * reward.amount;
       }
     }
     return total;
   };
 
   const contributions = calculateContributions();
+  const maxContributions = calculateMaxContributions();
   const daysLeft = Math.ceil((challenge.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
   return (
@@ -67,7 +103,12 @@ export function ChallengeCard({ challenge, userEnrolled, onEnroll, onLeave }: Ch
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
               {isActive && <Badge className="bg-primary text-primary-foreground">Active</Badge>}
-              {isPast && <Badge variant="secondary">Completed</Badge>}
+              {isPast && goalsMet === true && (
+                <Badge className="bg-green-600 text-white">Completed! 🎉</Badge>
+              )}
+              {isPast && goalsMet === false && (
+                <Badge className="bg-red-600 text-white">Failed 😞</Badge>
+              )}
               {isUpcoming && <Badge variant="outline">Upcoming</Badge>}
             </div>
             <h3 className="font-display text-xl font-semibold text-foreground group-hover:text-primary transition-colors">
@@ -85,7 +126,7 @@ export function ChallengeCard({ challenge, userEnrolled, onEnroll, onLeave }: Ch
         <div className="flex items-center gap-2 p-3 rounded-lg bg-nature-light">
           {getRewardIcon(challenge.repRewardType)}
           <span className="text-sm font-medium text-accent-foreground">
-            {contributions} {challenge.repRewardType} contributed
+            {contributions} / {maxContributions} {challenge.repRewardType}
           </span>
         </div>
 
@@ -126,7 +167,7 @@ export function ChallengeCard({ challenge, userEnrolled, onEnroll, onLeave }: Ch
           </Link>
           {!isPast && (
             userEnrolled ? (
-              <Button variant="ghost" onClick={onLeave} className="text-destructive">
+              <Button variant="outline" onClick={onLeave} className="text-destructive border-destructive hover:bg-destructive hover:text-white">
                 Leave
               </Button>
             ) : (

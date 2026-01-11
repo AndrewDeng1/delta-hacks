@@ -1,23 +1,27 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Navbar } from '@/components/Navbar';
-import { mockChallenges } from '@/data/mockChallenges';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  EXERCISE_LABELS, 
-  EXERCISE_ICONS, 
-  ExerciseType 
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { challengeAPI } from '@/lib/api';
+import { Challenge } from '@/types';
+import {
+  EXERCISE_LABELS,
+  EXERCISE_ICONS,
+  ExerciseType
 } from '@/types';
-import { 
-  ArrowLeft, 
-  Search, 
-  Users, 
+import {
+  ArrowLeft,
+  Search,
+  Users,
   ChevronLeft,
   ChevronRight,
-  ArrowUpDown
+  ArrowUpDown,
+  Loader2
 } from 'lucide-react';
 
 interface Contributor {
@@ -30,29 +34,97 @@ interface Contributor {
 
 export default function ChallengeContributors() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [challenge, setChallenge] = useState<Challenge | null>(null);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<'total' | ExerciseType>('total');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  const challenge = mockChallenges.find(c => c.id === id);
+  // Fetch challenge data
+  useEffect(() => {
+    const fetchChallenge = async () => {
+      if (!id) return;
 
-  // Mock contributors data
-  const mockContributors: Contributor[] = useMemo(() => [
-    { userId: '1', username: 'FitnessFan', email: 'fitness@example.com', reps: { jumping_jacks: 500, squats: 300, high_knees: 200 }, totalReps: 1000 },
-    { userId: '2', username: 'EcoRunner', email: 'eco@example.com', reps: { jumping_jacks: 320, squats: 180, high_knees: 450 }, totalReps: 950 },
-    { userId: '3', username: 'GreenWarrior', email: 'green@example.com', reps: { jumping_jacks: 280, squats: 220, high_knees: 150 }, totalReps: 650 },
-    { userId: '4', username: 'NatureLover', email: 'nature@example.com', reps: { jumping_jacks: 150, squats: 400, high_knees: 100 }, totalReps: 650 },
-    { userId: '5', username: 'OceanSaver', email: 'ocean@example.com', reps: { jumping_jacks: 200, squats: 150, high_knees: 300 }, totalReps: 650 },
-    { userId: '6', username: 'TreeHugger', email: 'tree@example.com', reps: { jumping_jacks: 180, squats: 120, high_knees: 280 }, totalReps: 580 },
-    { userId: '7', username: 'CleanPlanet', email: 'clean@example.com', reps: { jumping_jacks: 220, squats: 200, high_knees: 140 }, totalReps: 560 },
-    { userId: '8', username: 'HealthyHero', email: 'healthy@example.com', reps: { jumping_jacks: 160, squats: 180, high_knees: 200 }, totalReps: 540 },
-    { userId: '9', username: 'EarthFirst', email: 'earth@example.com', reps: { jumping_jacks: 140, squats: 160, high_knees: 220 }, totalReps: 520 },
-    { userId: '10', username: 'ActiveLife', email: 'active@example.com', reps: { jumping_jacks: 180, squats: 140, high_knees: 180 }, totalReps: 500 },
-    { userId: '11', username: 'FitMind', email: 'fitmind@example.com', reps: { jumping_jacks: 120, squats: 200, high_knees: 160 }, totalReps: 480 },
-    { userId: '12', username: 'PowerMove', email: 'power@example.com', reps: { jumping_jacks: 200, squats: 100, high_knees: 150 }, totalReps: 450 },
-  ], []);
+      try {
+        console.log('Fetching challenge:', id);
+        const apiChallenge = await challengeAPI.getChallenge(id);
+        console.log('Fetched challenge:', apiChallenge);
+
+        // Handle repReward transformation
+        const repReward: any = {};
+        Object.entries(apiChallenge.repReward).forEach(([key, value]) => {
+          if (Array.isArray(value)) {
+            repReward[key] = { amount: value[0], perReps: value[1] };
+          } else {
+            repReward[key] = { amount: value as number, perReps: 1 };
+          }
+        });
+
+        const transformed: Challenge = {
+          id: apiChallenge._id,
+          name: apiChallenge.name,
+          creatorId: apiChallenge.creatorUserId,
+          creatorName: 'User',
+          description: apiChallenge.description,
+          enabledExercises: apiChallenge.enabledExercises as any,
+          userContributions: apiChallenge.contributions,
+          enrolledUsers: apiChallenge.participants,
+          repGoal: apiChallenge.repGoal as any,
+          repReward: repReward,
+          repRewardType: Object.values(apiChallenge.repRewardType)[0] || 'trees planted',
+          completionReward: apiChallenge.completionReward,
+          startDate: new Date(apiChallenge.startDate),
+          endDate: new Date(apiChallenge.endDate),
+          isCompleted: apiChallenge.completed,
+        };
+
+        setChallenge(transformed);
+      } catch (error) {
+        console.error('Failed to fetch challenge:', error);
+        toast({
+          title: 'Failed to load challenge',
+          description: 'Please try again.',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchChallenge();
+  }, [id, toast]);
+
+  // Transform challenge contributions to contributor list
+  const contributors: Contributor[] = useMemo(() => {
+    if (!challenge) return [];
+
+    return Object.entries(challenge.userContributions).map(([userId, reps]) => {
+      const totalReps = Object.values(reps).reduce((sum, r) => sum + (r as number), 0);
+      return {
+        userId,
+        username: userId === user?.id ? 'You' : `User ${userId.slice(-4)}`,
+        email: '', // We don't have email in the backend response
+        reps: reps as Record<ExerciseType, number>,
+        totalReps,
+      };
+    });
+  }, [challenge, user]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="container mx-auto px-4 py-12 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2 text-muted-foreground">Loading contributors...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!challenge) {
     return (
@@ -69,9 +141,9 @@ export default function ChallengeContributors() {
   }
 
   // Filter contributors
-  const filteredContributors = mockContributors.filter(c => 
+  const filteredContributors = contributors.filter(c =>
     c.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.email.toLowerCase().includes(searchQuery.toLowerCase())
+    c.userId.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Sort contributors
@@ -127,7 +199,7 @@ export default function ChallengeContributors() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by username or email..."
+                  placeholder="Search by username or user ID..."
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
@@ -158,24 +230,25 @@ export default function ChallengeContributors() {
             </div>
 
             {/* Contributors Table */}
-            <div className="rounded-lg border overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="text-left p-4 font-medium text-muted-foreground">Rank</th>
-                      <th className="text-left p-4 font-medium text-muted-foreground">User</th>
-                      {challenge.enabledExercises.map(ex => (
-                        <th key={ex} className="text-center p-4 font-medium text-muted-foreground">
-                          <span className="mr-1">{EXERCISE_ICONS[ex]}</span>
-                          {EXERCISE_LABELS[ex]}
-                        </th>
-                      ))}
-                      <th className="text-center p-4 font-medium text-muted-foreground">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {paginatedContributors.map((contributor, index) => {
+            {filteredContributors.length > 0 ? (
+              <div className="rounded-lg border overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left p-4 font-medium text-muted-foreground">Rank</th>
+                        <th className="text-left p-4 font-medium text-muted-foreground">User</th>
+                        {challenge.enabledExercises.map(ex => (
+                          <th key={ex} className="text-center p-4 font-medium text-muted-foreground">
+                            <span className="mr-1">{EXERCISE_ICONS[ex]}</span>
+                            {EXERCISE_LABELS[ex]}
+                          </th>
+                        ))}
+                        <th className="text-center p-4 font-medium text-muted-foreground">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {paginatedContributors.map((contributor, index) => {
                       const rank = (currentPage - 1) * itemsPerPage + index + 1;
                       return (
                         <tr key={contributor.userId} className="hover:bg-muted/30 transition-colors">
@@ -186,7 +259,7 @@ export default function ChallengeContributors() {
                           </td>
                           <td className="p-4">
                             <p className="font-medium">{contributor.username}</p>
-                            <p className="text-sm text-muted-foreground">{contributor.email}</p>
+                            <p className="text-sm text-muted-foreground font-mono text-xs">ID: {contributor.userId.slice(-8)}</p>
                           </td>
                           {challenge.enabledExercises.map(ex => (
                             <td key={ex} className="p-4 text-center font-medium">
@@ -199,12 +272,19 @@ export default function ChallengeContributors() {
                             </span>
                           </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No contributors found</p>
+                <p className="text-sm mt-1">Be the first to contribute to this challenge!</p>
+              </div>
+            )}
 
             {/* Pagination */}
             {totalPages > 1 && (

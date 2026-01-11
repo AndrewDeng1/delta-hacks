@@ -132,29 +132,25 @@ export default function ChallengeDetail() {
   // Check if user is enrolled
   const enrolled = challenge.enrolledUsers.includes(user?.id || '');
 
-  // Debug logging
-  console.log('Challenge Detail Debug:', {
-    challengeId: challenge.id,
-    userId: user?.id,
-    isOwner,
-    enrolled,
-    isActive,
-    enrolledUsers: challenge.enrolledUsers,
-    startDate: challenge.startDate,
-    endDate: challenge.endDate,
-    now: now,
-  });
-
-  // Calculate total reps per exercise
+  // Calculate total reps per exercise (capped at goal)
   const getTotalReps = (exercise: ExerciseType) => {
+    const actual = Object.values(challenge.userContributions).reduce(
+      (sum, userReps) => sum + (userReps[exercise] || 0), 0
+    );
+    const goal = challenge.repGoal[exercise] || 0;
+    return Math.min(actual, goal);
+  };
+
+  // Get actual reps (not capped) for checking completion
+  const getActualTotalReps = (exercise: ExerciseType) => {
     return Object.values(challenge.userContributions).reduce(
       (sum, userReps) => sum + (userReps[exercise] || 0), 0
     );
   };
 
-  // Calculate contributions
+  // Calculate contributions (based on capped reps)
   const getContributions = (exercise: ExerciseType) => {
-    const totalReps = getTotalReps(exercise);
+    const totalReps = getTotalReps(exercise); // Already capped
     const reward = challenge.repReward[exercise];
     if (reward && reward.perReps > 0) {
       return Math.floor(totalReps / reward.perReps) * reward.amount;
@@ -164,6 +160,20 @@ export default function ChallengeDetail() {
 
   const totalContributions = challenge.enabledExercises.reduce(
     (sum, ex) => sum + getContributions(ex), 0
+  );
+
+  // Calculate maximum possible contributions if all goals are met
+  const getMaxContributions = (exercise: ExerciseType) => {
+    const goal = challenge.repGoal[exercise];
+    const reward = challenge.repReward[exercise];
+    if (reward && reward.perReps > 0 && goal > 0) {
+      return Math.floor(goal / reward.perReps) * reward.amount;
+    }
+    return 0;
+  };
+
+  const maxTotalContributions = challenge.enabledExercises.reduce(
+    (sum, ex) => sum + getMaxContributions(ex), 0
   );
 
   // Calculate top contributors from actual challenge data
@@ -186,6 +196,27 @@ export default function ChallengeDetail() {
   };
 
   const topContributors = getTopContributors();
+
+  // Check if challenge is ended or completed
+  const isEnded = now > challenge.endDate || challenge.isCompleted;
+
+  // Check if all goals were met (for completion status)
+  const checkGoalsMet = () => {
+    if (!isEnded) return null;
+
+    let allGoalsMet = true;
+    for (const exercise of challenge.enabledExercises) {
+      const actualReps = getActualTotalReps(exercise);
+      const goal = challenge.repGoal[exercise];
+      if (actualReps < goal) {
+        allGoalsMet = false;
+        break;
+      }
+    }
+    return allGoalsMet;
+  };
+
+  const goalsMet = checkGoalsMet();
 
   const handleEnroll = async () => {
     if (!challenge || !id) return;
@@ -306,7 +337,12 @@ export default function ChallengeDetail() {
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-4">
               {isActive && <Badge className="bg-primary text-primary-foreground">Active</Badge>}
-              {!isActive && challenge.isCompleted && <Badge variant="secondary">Completed</Badge>}
+              {!isActive && goalsMet === true && (
+                <Badge className="bg-green-600 text-white">Challenge Completed! 🎉</Badge>
+              )}
+              {!isActive && goalsMet === false && (
+                <Badge className="bg-red-600 text-white">Challenge Failed 😞</Badge>
+              )}
               {isOwner && <Badge variant="outline">Your Challenge</Badge>}
             </div>
             <h1 className="font-display text-4xl font-bold mb-4">{challenge.name}</h1>
@@ -346,7 +382,7 @@ export default function ChallengeDetail() {
                     <Play className="h-5 w-5" />
                     Start Exercising
                   </Button>
-                  <Button variant="outline" size="lg" onClick={() => setShowLeaveDialog(true)} className="gap-2 text-destructive hover:text-destructive">
+                  <Button variant="outline" size="lg" onClick={() => setShowLeaveDialog(true)} className="gap-2 text-destructive border-destructive hover:bg-destructive hover:text-white hover:border-destructive">
                     <LogOut className="h-5 w-5" />
                     Leave Challenge
                   </Button>
@@ -361,7 +397,7 @@ export default function ChallengeDetail() {
 
               {/* Show delete button for owners (active or past) */}
               {isOwner && (
-                <Button variant="outline" size="lg" onClick={() => setShowDeleteDialog(true)} className="gap-2 text-destructive hover:text-destructive">
+                <Button variant="outline" size="lg" onClick={() => setShowDeleteDialog(true)} className="gap-2 text-destructive border-destructive hover:bg-destructive hover:text-white hover:border-destructive">
                   <Trash2 className="h-5 w-5" />
                   Delete Challenge
                 </Button>
@@ -375,10 +411,15 @@ export default function ChallengeDetail() {
               <div className="text-center mb-6">
                 <Trophy className="h-12 w-12 mx-auto text-primary mb-3" />
                 <p className="text-sm text-muted-foreground mb-1">Total Community Impact</p>
-                <p className="font-display text-5xl font-bold text-gradient">
-                  {totalContributions}
-                </p>
-                <p className="text-lg text-muted-foreground">{challenge.repRewardType}</p>
+                <div className="flex items-baseline justify-center gap-2">
+                  <p className="font-display text-5xl font-bold text-gradient">
+                    {totalContributions}
+                  </p>
+                  <p className="font-display text-2xl text-muted-foreground">
+                    / {maxTotalContributions}
+                  </p>
+                </div>
+                <p className="text-lg text-muted-foreground mt-1">{challenge.repRewardType}</p>
               </div>
               <div className="p-4 rounded-lg bg-muted/50 text-center">
                 <Target className="h-5 w-5 mx-auto text-primary mb-2" />
@@ -401,11 +442,13 @@ export default function ChallengeDetail() {
             </CardHeader>
             <CardContent className="space-y-6">
               {challenge.enabledExercises.map((exercise) => {
-                const total = getTotalReps(exercise);
+                const total = getTotalReps(exercise); // Capped at goal
+                const actualTotal = getActualTotalReps(exercise); // Actual reps
                 const goal = challenge.repGoal[exercise];
                 const progress = goal > 0 ? Math.min((total / goal) * 100, 100) : 0;
                 const reward = challenge.repReward[exercise];
                 const contributions = getContributions(exercise);
+                const goalMet = actualTotal >= goal;
 
                 return (
                   <div key={exercise}>
@@ -413,6 +456,7 @@ export default function ChallengeDetail() {
                       <div className="flex items-center gap-2">
                         <span className="text-xl">{EXERCISE_ICONS[exercise]}</span>
                         <span className="font-medium">{EXERCISE_LABELS[exercise]}</span>
+                        {goalMet && <span className="text-green-600">✓</span>}
                       </div>
                       <span className="text-sm text-muted-foreground">
                         {total.toLocaleString()} / {goal.toLocaleString()}

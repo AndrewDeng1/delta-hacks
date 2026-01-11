@@ -121,12 +121,13 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
             <Card className="overflow-hidden">
               <CardContent className="p-0">
                 <div className="relative aspect-video bg-muted">
-                  <video 
-                    ref={videoRef} 
-                    autoPlay 
-                    playsInline 
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
                     muted
                     className="w-full h-full object-cover"
+                    style={{ transform: 'scaleX(-1)' }}
                   />
                   {!cameraActive && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
