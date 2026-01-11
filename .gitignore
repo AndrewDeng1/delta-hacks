@@ -3,7 +3,11 @@
 __pycache__/
 *.pyc
 .venv/
-script.py
+
+# MediaPipe models and data
+backend/pose_landmarker.task
+backend/rep_counter.json
+backend/target_exercise.json
 
 # Node
 node_modules/

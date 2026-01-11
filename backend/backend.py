@@ -627,6 +627,59 @@ def process_reps():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/target-exercise', methods=['POST'])
+def set_target_exercise():
+    """
+    Set the target exercise for the motion detection script
+    Request body: { "target": "squats" | "jumping_jacks" | "high_knees" }
+    No authentication required
+    """
+    try:
+        data = request.json
+        if not data or 'target' not in data:
+            return jsonify({'error': 'Missing target field'}), 400
+
+        target = data['target']
+
+        # Validate target exercise
+        valid_exercises = ["squats", "jumping_jacks", "high_knees"]
+        if target not in valid_exercises:
+            return jsonify({'error': f'Invalid target. Must be one of: {", ".join(valid_exercises)}'}), 400
+
+        # Write to target_exercise.json
+        target_file_path = os.path.join(os.path.dirname(__file__), "target_exercise.json")
+        with open(target_file_path, 'w') as f:
+            json.dump({"target": target}, f, indent=2)
+
+        return jsonify({'success': True, 'target': target})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/target-exercise', methods=['GET'])
+def get_target_exercise():
+    """
+    Get the current target exercise
+    No authentication required
+    """
+    try:
+        target_file_path = os.path.join(os.path.dirname(__file__), "target_exercise.json")
+
+        if not os.path.exists(target_file_path):
+            # Create default file
+            default_target = {"target": "squats"}
+            with open(target_file_path, 'w') as f:
+                json.dump(default_target, f, indent=2)
+            return jsonify(default_target)
+
+        with open(target_file_path, 'r') as f:
+            target_data = json.load(f)
+
+        return jsonify(target_data)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/challenges/<challenge_id>/contributions/increment', methods=['POST'])
 @verify_token_decorator
 def increment_contributions(challenge_id):
