@@ -9,3 +9,5 @@ uvicorn
 passlib[bcrypt]
 python-jose[cryptography]
 python-multipart
+cerebras-cloud-sdk
+moorcheh-sdk

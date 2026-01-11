@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { challengeAPI } from '@/lib/api';
+import { challengeAPI, usersAPI } from '@/lib/api';
 import { Challenge } from '@/types';
 import {
   EXERCISE_LABELS,
@@ -42,6 +42,7 @@ export default function ChallengeContributors() {
   const [sortField, setSortField] = useState<'total' | ExerciseType>('total');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [usernameMap, setUsernameMap] = useState<Record<string, string>>({});
   const itemsPerPage = 10;
 
   // Fetch challenge data
@@ -83,6 +84,21 @@ export default function ChallengeContributors() {
         };
 
         setChallenge(transformed);
+
+        // Fetch usernames for all contributors
+        const userIds = Object.keys(apiChallenge.contributions);
+        if (userIds.length > 0) {
+          try {
+            const { users } = await usersAPI.getUsersBatch(userIds);
+            const usernameMapping: Record<string, string> = {};
+            for (const userId in users) {
+              usernameMapping[userId] = users[userId].username;
+            }
+            setUsernameMap(usernameMapping);
+          } catch (error) {
+            console.error('Failed to fetch usernames:', error);
+          }
+        }
       } catch (error) {
         console.error('Failed to fetch challenge:', error);
         toast({
@@ -104,15 +120,26 @@ export default function ChallengeContributors() {
 
     return Object.entries(challenge.userContributions).map(([userId, reps]) => {
       const totalReps = Object.values(reps).reduce((sum, r) => sum + (r as number), 0);
+
+      // Determine display name
+      let displayName: string;
+      if (userId === user?.id) {
+        displayName = 'You';
+      } else if (usernameMap[userId]) {
+        displayName = usernameMap[userId];
+      } else {
+        displayName = `User ${userId.slice(-4)}`;
+      }
+
       return {
         userId,
-        username: userId === user?.id ? 'You' : `User ${userId.slice(-4)}`,
+        username: displayName,
         email: '', // We don't have email in the backend response
         reps: reps as Record<ExerciseType, number>,
         totalReps,
       };
     });
-  }, [challenge, user]);
+  }, [challenge, user, usernameMap]);
 
   if (loading) {
     return (

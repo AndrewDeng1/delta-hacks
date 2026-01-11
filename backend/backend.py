@@ -9,7 +9,7 @@ from pymongo import MongoClient, ASCENDING
 from bson import ObjectId
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from functools import wraps
 import os
 import json
@@ -78,6 +78,8 @@ try:
     db = client[MONGODB_DB_NAME]
     users_collection = db['users']
     challenges_collection = db['challenges']
+    coach_chats_collection = db['coach_chats']
+    user_medical_info_collection = db['user_medical_info']
 
     # Create unique index on email
     users_collection.create_index([("email", ASCENDING)], unique=True)
@@ -94,6 +96,50 @@ except Exception as e:
 
 app = Flask(__name__)
 CORS(app)
+
+# ============================================================================
+# AI INTEGRATIONS (Cerebras & Moorcheh)
+# ============================================================================
+
+# Cerebras client for AI responses
+from cerebras.cloud.sdk import Cerebras
+
+cerebras_client = Cerebras(
+    api_key=os.getenv("CEREBRAS_API_KEY", "csk-tkpt6mncyv3dhe8fhy3cr5c64ddwd233f5fyrt4t63rjvkp8")
+)
+
+# Moorcheh client for RAG
+from moorcheh_sdk import MoorchehClient, MoorchehError
+
+MOORCHEH_API_KEY = os.getenv("MOORCHEH_API_KEY")
+moorcheh_client = None
+if MOORCHEH_API_KEY:
+    try:
+        moorcheh_client = MoorchehClient(api_key=MOORCHEH_API_KEY)
+        print("✓ Moorcheh client initialized")
+    except Exception as e:
+        print(f"✗ Moorcheh initialization failed: {e}")
+else:
+    print("⚠ MOORCHEH_API_KEY not set - RAG features will be disabled")
+
+# System prompt for the coach
+COACH_SYSTEM_PROMPT = """You're texting the user as their gym coach. Text like a real person - casual, encouraging, short messages.
+
+**Motion4Good:** Fitness challenges. Webcam counts reps in real-time. Users contribute to shared goals, earn rewards.
+
+**Exercises:** jumping_jacks, squats, high_knees, bicep_curls, tricep_extensions, lateral_raises (last 3 need dumbbells)
+
+**Texting Style:**
+- Keep it SHORT - like actual texts (1-2 sentences max)
+- Multiple short messages > one long message
+- Use casual language, contractions (you're, let's, etc)
+- Skip formalities - just get to the point
+- Include challenge links: http://localhost:8080/challenges/{id}
+
+**Tool:** Need data? Use: TOOL: GET_DATA
+Returns all challenges and user info.
+
+Text naturally. Don't mention the tool."""
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -122,7 +168,7 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict) -> str:
     """Create JWT token"""
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -147,6 +193,276 @@ def verify_token_decorator(f):
 
         return f(*args, **kwargs)
     return decorated_function
+
+# ============================================================================
+# CONSULTANT HELPER FUNCTIONS
+# ============================================================================
+
+def initialize_user_namespace(user_id):
+    """Create Moorcheh namespace for user if it doesn't exist"""
+    if not moorcheh_client:
+        return False
+
+    namespace_name = f"user_{user_id}_context"
+    try:
+        moorcheh_client.namespaces.create(
+            namespace_name=namespace_name,
+            type="text"
+        )
+        return True
+    except:
+        # Namespace already exists
+        return True
+
+def index_chat_history(user_id, messages):
+    """Upload chat history to Moorcheh for RAG"""
+    if not moorcheh_client:
+        return
+
+    namespace = f"user_{user_id}_context"
+    try:
+        docs = [
+            {
+                "id": f"msg_{user_id}_{i}_{int(datetime.now(UTC).timestamp())}",
+                "text": f"{msg['role']}: {msg['content']}"
+            }
+            for i, msg in enumerate(messages)
+        ]
+        if docs:
+            moorcheh_client.documents.upload(namespace_name=namespace, documents=docs)
+    except Exception as e:
+        print(f"Failed to index chat history: {e}")
+
+def index_medical_info(user_id, medical_info):
+    """Upload medical info to Moorcheh for RAG"""
+    if not moorcheh_client:
+        return
+
+    namespace = f"user_{user_id}_context"
+    try:
+        docs = []
+        if medical_info.get('goals'):
+            docs.append({"id": f"goals_{user_id}", "text": f"Fitness Goals: {medical_info['goals']}"})
+        if medical_info.get('medicalHistory'):
+            docs.append({"id": f"medical_{user_id}", "text": f"Medical History: {medical_info['medicalHistory']}"})
+        if medical_info.get('physicalStatus'):
+            docs.append({"id": f"physical_{user_id}", "text": f"Physical Status: {medical_info['physicalStatus']}"})
+        if medical_info.get('concerns'):
+            docs.append({"id": f"concerns_{user_id}", "text": f"Concerns: {medical_info['concerns']}"})
+        if medical_info.get('dietaryRestrictions'):
+            docs.append({"id": f"dietary_{user_id}", "text": f"Dietary Restrictions: {medical_info['dietaryRestrictions']}"})
+
+        if docs:
+            moorcheh_client.documents.upload(namespace_name=namespace, documents=docs)
+    except Exception as e:
+        print(f"Failed to index medical info: {e}")
+
+def get_rag_context(user_id, query):
+    """Get relevant context using Moorcheh RAG"""
+    if not moorcheh_client:
+        return ""
+
+    namespace = f"user_{user_id}_context"
+    try:
+        results = moorcheh_client.similarity_search.query(
+            namespaces=[namespace],
+            query=query,
+            top_k=5
+        )
+        if results and 'results' in results:
+            return "\n".join([r.get('text', '') for r in results['results']])
+        return ""
+    except Exception as e:
+        print(f"Failed to get RAG context: {e}")
+        return ""
+
+def get_tool_data(tool_name, user_id):
+    """Execute tool calls and return data"""
+    try:
+        if tool_name == "GET_DATA":
+            # Get all challenges
+            all_challenges = list(challenges_collection.find({}).limit(20))
+            challenges_data = []
+            user_enrolled_ids = []
+
+            for ch in all_challenges:
+                ch_id = str(ch['_id'])
+                is_enrolled = user_id in ch.get('participants', [])
+
+                if is_enrolled:
+                    user_enrolled_ids.append(ch_id)
+
+                challenges_data.append({
+                    "id": ch_id,
+                    "name": ch['name'],
+                    "description": ch['description'],
+                    "exercises": ch.get('enabledExercises', []),
+                    "repGoals": ch.get('repGoal', {}),
+                    "completionReward": ch.get('completionReward', ''),
+                    "participants": len(ch.get('participants', [])),
+                    "completed": ch.get('completed', False),
+                    "user_enrolled": is_enrolled,
+                    "user_contributions": ch.get('contributions', {}).get(user_id, {}) if is_enrolled else {}
+                })
+
+            result = {
+                "all_challenges": challenges_data,
+                "user_enrolled_challenge_ids": user_enrolled_ids,
+                "available_exercises": {
+                    "jumping_jacks": "Full-body cardio",
+                    "squats": "Lower body strength",
+                    "high_knees": "Cardio endurance",
+                    "bicep_curls": "Upper body (dumbbells)",
+                    "tricep_extensions": "Upper arm (dumbbells)",
+                    "lateral_raises": "Shoulders (dumbbells)"
+                }
+            }
+
+            return json.dumps(result, indent=2)
+
+        return ""
+    except Exception as e:
+        print(f"Tool execution error: {e}")
+        import traceback
+        traceback.print_exc()
+        return ""
+
+def get_ai_response(user_message, chat_history, rag_context, user_id, coach_settings=None, retry_count=0):
+    """Get response from Cerebras GLM 4.6 with tool calling support"""
+    max_retries = 5
+
+    try:
+        # Build system prompt with coach settings
+        system_prompt = COACH_SYSTEM_PROMPT
+
+        if coach_settings:
+            settings_parts = []
+
+            tone = coach_settings.get('tonePreference', 'casual')
+            if tone == 'professional':
+                settings_parts.append("- Use professional, formal tone")
+            elif tone == 'friendly':
+                settings_parts.append("- Use friendly, warm tone")
+            elif tone == 'motivational':
+                settings_parts.append("- Be extra motivating and energetic")
+
+            response_length = coach_settings.get('responseLength', 'short')
+            if response_length == 'very_short':
+                settings_parts.append("- Keep responses VERY SHORT (1 sentence max)")
+            elif response_length == 'medium':
+                settings_parts.append("- Use moderate length responses (2-3 sentences)")
+
+            motivation_level = coach_settings.get('motivationLevel', 'moderate')
+            if motivation_level == 'high':
+                settings_parts.append("- User wants HIGH ENERGY motivation - be super enthusiastic!")
+            elif motivation_level == 'low':
+                settings_parts.append("- User prefers gentle encouragement - keep it chill")
+
+            focus_areas = coach_settings.get("focusAreas", [])
+            if focus_areas:
+                settings_parts.append(f"- User's focus areas: {', '.join(focus_areas)}")
+
+            if settings_parts:
+                system_prompt += "\n\n**User Preferences:**\n" + "\n".join(settings_parts)
+
+        messages = [{"role": "system", "content": system_prompt}]
+
+        # Add recent chat history (last 6 messages)
+        recent_history = chat_history[-6:] if len(chat_history) > 6 else chat_history
+        for msg in recent_history:
+            if msg.get('role') in ['user', 'assistant']:
+                messages.append({
+                    "role": msg['role'],
+                    "content": msg['content']
+                })
+
+        # Add current user message
+        messages.append({"role": "user", "content": user_message})
+
+        # First call to check if LLM needs tools
+        response = cerebras_client.chat.completions.create(
+            model="zai-glm-4.6",
+            messages=messages,
+            temperature=0.8,
+            max_tokens=300
+        )
+
+        ai_content = response.choices[0].message.content
+        print(f"[AI Response] Length: {len(ai_content) if ai_content else 0}, Content: {ai_content[:200] if ai_content else 'EMPTY'}")
+
+        # If content is empty or None, retry
+        if not ai_content or not ai_content.strip():
+            if retry_count < max_retries:
+                print(f"[Retry {retry_count + 1}/{max_retries}] Empty response, retrying...")
+                import time
+                time.sleep(1)  # Wait 1 second before retrying
+                return get_ai_response(user_message, chat_history, rag_context, user_id, coach_settings, retry_count + 1)
+            else:
+                print(f"[Max Retries Reached] Giving up after {max_retries} attempts")
+                return "Hey! I'm having some trouble right now. Can you try asking again?"
+
+        # Check if response contains tool calls
+        if ai_content and "TOOL:" in ai_content:
+            print("[Tool Call Detected]")
+            # Extract tool calls
+            lines = ai_content.split('\n')
+            tool_calls = []
+            for line in lines:
+                if line.strip().startswith("TOOL:"):
+                    tool_name = line.replace("TOOL:", "").strip()
+                    tool_calls.append(tool_name)
+
+            # Execute tools and gather data
+            tool_results = []
+            for tool_name in tool_calls:
+                print(f"[Executing Tool] {tool_name}")
+                data = get_tool_data(tool_name, user_id)
+                if data:
+                    tool_results.append(f"{tool_name} Results:\n{data}")
+
+            # Second call with tool results
+            if tool_results:
+                messages.append({"role": "assistant", "content": ai_content})
+                messages.append({
+                    "role": "system",
+                    "content": f"Data:\n\n{chr(10).join(tool_results)}\n\nText back like a real person. 1-2 short sentences. Include challenge links."
+                })
+
+                response = cerebras_client.chat.completions.create(
+                    model="zai-glm-4.6",
+                    messages=messages,
+                    temperature=0.8,
+                    max_tokens=300
+                )
+
+                ai_content = response.choices[0].message.content
+                print(f"[Final AI Response] Length: {len(ai_content) if ai_content else 0}")
+
+                # Check if final response is empty and retry if needed
+                if not ai_content or not ai_content.strip():
+                    if retry_count < max_retries:
+                        print(f"[Retry {retry_count + 1}/{max_retries}] Empty final response, retrying...")
+                        import time
+                        time.sleep(1)
+                        return get_ai_response(user_message, chat_history, rag_context, user_id, coach_settings, retry_count + 1)
+                    else:
+                        return "Hey! I'm having some trouble right now. Can you try asking again?"
+
+        return ai_content
+    except Exception as e:
+        print(f"Failed to get AI response (attempt {retry_count + 1}/{max_retries}): {e}")
+        import traceback
+        traceback.print_exc()
+
+        # Retry on exception
+        if retry_count < max_retries:
+            print(f"[Retry {retry_count + 1}/{max_retries}] Exception occurred, retrying...")
+            import time
+            time.sleep(1)  # Wait 1 second before retrying
+            return get_ai_response(user_message, chat_history, rag_context, user_id, coach_settings, retry_count + 1)
+        else:
+            print(f"[Max Retries Reached] Giving up after {max_retries} attempts")
+            return "Hey! I'm having some trouble right now. Can you try asking again?"
 
 # ============================================================================
 # API ROUTES
@@ -202,7 +518,7 @@ def create_user():
             "email": email,
             "passwordHash": hashed_password,
             "enrolledChallenges": [],
-            "createdAt": datetime.utcnow()
+            "createdAt": datetime.now(UTC)
         }
 
         # Insert into database
@@ -252,6 +568,45 @@ def logout():
     """Logout user (client should discard token)"""
     return jsonify({'success': True})
 
+@app.route('/users/batch', methods=['POST'])
+def get_users_batch():
+    """Get user information for multiple user IDs"""
+    try:
+        data = request.json
+        user_ids = data.get('user_ids', [])
+
+        if not user_ids:
+            return jsonify({'users': {}}), 200
+
+        # Convert string IDs to ObjectIds
+        object_ids = []
+        for user_id in user_ids:
+            try:
+                object_ids.append(ObjectId(user_id))
+            except:
+                pass  # Skip invalid IDs
+
+        # Fetch users from database
+        users = users_collection.find(
+            {"_id": {"$in": object_ids}},
+            {"_id": 1, "username": 1, "email": 1}
+        )
+
+        # Build response dictionary
+        users_dict = {}
+        for user in users:
+            users_dict[str(user["_id"])] = {
+                "id": str(user["_id"]),
+                "username": user.get("username", "Unknown"),
+                "email": user.get("email", "")
+            }
+
+        return jsonify({'users': users_dict}), 200
+
+    except Exception as e:
+        print(f"✗ Error fetching users: {e}")
+        return jsonify({'error': str(e)}), 500
+
 # ============================================================================
 # CHALLENGES
 # ============================================================================
@@ -293,7 +648,7 @@ def create_challenge():
             "startDate": datetime.fromisoformat(data['start_date'].replace('Z', '+00:00')),
             "endDate": datetime.fromisoformat(data['end_date'].replace('Z', '+00:00')),
             "completed": False,
-            "createdAt": datetime.utcnow()
+            "createdAt": datetime.now(UTC)
         }
 
         # Insert into database
@@ -801,6 +1156,302 @@ def get_contributions(challenge_id, user_id):
         return jsonify(contributions)
 
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# COACH API ENDPOINTS
+# ============================================================================
+
+@app.route('/coach/chat', methods=['POST'])
+@verify_token_decorator
+def coach_chat():
+    """Send message to coach and get AI response"""
+    try:
+        user_id = request.user_id
+        data = request.get_json()
+        user_message = data.get('message')
+
+        if not user_message:
+            return jsonify({'error': 'Message is required'}), 400
+
+        # Initialize user's Moorcheh namespace
+        initialize_user_namespace(user_id)
+
+        # Get or create chat document
+        chat = coach_chats_collection.find_one({"userId": user_id})
+        if not chat:
+            chat = {
+                "userId": user_id,
+                "messages": [],
+                "createdAt": datetime.now(UTC)
+            }
+            result = coach_chats_collection.insert_one(chat)
+            chat['_id'] = result.inserted_id
+
+        # Get RAG context
+        rag_context = get_rag_context(user_id, user_message)
+
+        # Get user's coach settings
+        user = users_collection.find_one({"_id": ObjectId(user_id)})
+        coach_settings = user.get("coachSettings", {}) if user else {}
+
+        # Get AI response
+        ai_response = get_ai_response(
+            user_message,
+            chat.get('messages', []),
+            rag_context,
+            user_id,
+            coach_settings
+        )
+
+        # Save messages
+        new_messages = [
+            {"role": "user", "content": user_message, "timestamp": datetime.now(UTC)},
+            {"role": "assistant", "content": ai_response, "timestamp": datetime.now(UTC)}
+        ]
+
+        coach_chats_collection.update_one(
+            {"userId": user_id},
+            {
+                "$push": {"messages": {"$each": new_messages}},
+                "$set": {"updatedAt": datetime.now(UTC)}
+            }
+        )
+
+        # Update Moorcheh index with new messages
+        index_chat_history(user_id, new_messages)
+
+        response_data = {
+            "response": ai_response,
+            "context_used": bool(rag_context)
+        }
+        print(f"[Coach API] Returning response: {response_data}")
+        return jsonify(response_data)
+
+    except Exception as e:
+        print(f"Error in coach_chat: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/coach/history', methods=['GET'])
+@verify_token_decorator
+def get_coach_history():
+    """Get user's chat history"""
+    try:
+        user_id = request.user_id
+
+        chat = coach_chats_collection.find_one({"userId": user_id})
+        if not chat:
+            return jsonify({"messages": []})
+
+        # Convert timestamps to ISO format
+        messages = []
+        for msg in chat.get('messages', []):
+            msg_copy = msg.copy()
+            if isinstance(msg_copy.get('timestamp'), datetime):
+                msg_copy['timestamp'] = msg_copy['timestamp'].isoformat()
+            messages.append(msg_copy)
+
+        return jsonify({"messages": messages})
+
+    except Exception as e:
+        print(f"Error in get_coach_history: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/coach/history', methods=['DELETE'])
+@verify_token_decorator
+def clear_coach_history():
+    """Clear user's chat history"""
+    try:
+        user_id = request.user_id
+
+        coach_chats_collection.delete_one({"userId": user_id})
+
+        return jsonify({"message": "Chat history cleared"})
+
+    except Exception as e:
+        print(f"Error in clear_coach_history: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/coach/medical-info', methods=['GET'])
+@verify_token_decorator
+def get_medical_info():
+    """Get user's medical information from user document"""
+    try:
+        user_id = request.user_id
+
+        # Get user document
+        user = users_collection.find_one({"_id": ObjectId(user_id)})
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Get medical info from user document
+        medical_info = user.get("medicalInfo", {})
+
+        return jsonify({
+            "goals": medical_info.get("goals", ""),
+            "medicalHistory": medical_info.get("medicalHistory", ""),
+            "physicalStatus": medical_info.get("physicalStatus", ""),
+            "concerns": medical_info.get("concerns", ""),
+            "dietaryRestrictions": medical_info.get("dietaryRestrictions", "")
+        })
+
+    except Exception as e:
+        print(f"Error in get_medical_info: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/coach/medical-info', methods=['POST'])
+@verify_token_decorator
+def update_medical_info():
+    """Update user's medical information in user document"""
+    try:
+        user_id = request.user_id
+        data = request.get_json()
+
+        # Build medical info object
+        medical_info = {}
+        if 'goals' in data:
+            medical_info['goals'] = data['goals']
+        if 'medicalHistory' in data:
+            medical_info['medicalHistory'] = data['medicalHistory']
+        if 'physicalStatus' in data:
+            medical_info['physicalStatus'] = data['physicalStatus']
+        if 'concerns' in data:
+            medical_info['concerns'] = data['concerns']
+        if 'dietaryRestrictions' in data:
+            medical_info['dietaryRestrictions'] = data['dietaryRestrictions']
+
+        medical_info['updatedAt'] = datetime.now(UTC).isoformat()
+
+        # Update user document with medical info
+        users_collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"medicalInfo": medical_info}}
+        )
+
+        # Initialize namespace and index medical info for RAG
+        initialize_user_namespace(user_id)
+        index_medical_info(user_id, medical_info)
+
+        print(f"✓ Updated medical info for user {user_id}")
+
+        return jsonify({"message": "Medical information updated"})
+
+    except Exception as e:
+        print(f"Error in update_medical_info: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/coach/settings', methods=['GET'])
+@verify_token_decorator
+def get_coach_settings():
+    """Get user's coach settings from user document"""
+    try:
+        user_id = request.user_id
+
+        # Get user document
+        user = users_collection.find_one({"_id": ObjectId(user_id)})
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Get coach settings from user document
+        coach_settings = user.get("coachSettings", {})
+
+        return jsonify({
+            "tonePreference": coach_settings.get("tonePreference", "casual"),
+            "responseLength": coach_settings.get("responseLength", "short"),
+            "motivationLevel": coach_settings.get("motivationLevel", "moderate"),
+            "focusAreas": coach_settings.get("focusAreas", []),
+            "notificationPreference": coach_settings.get("notificationPreference", "daily"),
+        })
+
+    except Exception as e:
+        print(f"Error in get_coach_settings: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/coach/settings', methods=['POST'])
+@verify_token_decorator
+def update_coach_settings():
+    """Update user's coach settings in user document"""
+    try:
+        user_id = request.user_id
+        data = request.get_json()
+
+        # Build coach settings object
+        coach_settings = {}
+        if 'tonePreference' in data:
+            coach_settings['tonePreference'] = data['tonePreference']
+        if 'responseLength' in data:
+            coach_settings['responseLength'] = data['responseLength']
+        if 'motivationLevel' in data:
+            coach_settings['motivationLevel'] = data['motivationLevel']
+        if 'focusAreas' in data:
+            coach_settings['focusAreas'] = data['focusAreas']
+        if 'notificationPreference' in data:
+            coach_settings['notificationPreference'] = data['notificationPreference']
+
+        coach_settings['updatedAt'] = datetime.now(UTC).isoformat()
+
+        # Update user document with coach settings
+        users_collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"coachSettings": coach_settings}}
+        )
+
+        print(f"✓ Updated coach settings for user {user_id}")
+
+        return jsonify({"message": "Coach settings updated"})
+
+    except Exception as e:
+        print(f"Error in update_coach_settings: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/coach/upload-document', methods=['POST'])
+@verify_token_decorator
+def upload_medical_document():
+    """Upload medical document (text only for now) - stores in user document"""
+    try:
+        user_id = request.user_id
+        data = request.get_json()
+
+        name = data.get('name')
+        content = data.get('content')
+
+        if not name or not content:
+            return jsonify({'error': 'Name and content are required'}), 400
+
+        # Add document to user's medical info in user document
+        doc = {
+            "id": str(ObjectId()),
+            "name": name,
+            "content": content,
+            "uploadedAt": datetime.now(UTC).isoformat()
+        }
+
+        users_collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {
+                "$push": {"medicalInfo.documents": doc},
+                "$set": {"medicalInfo.updatedAt": datetime.now(UTC).isoformat()}
+            }
+        )
+
+        # Index document for RAG
+        initialize_user_namespace(user_id)
+        namespace = f"user_{user_id}_context"
+        try:
+            if moorcheh_client:
+                moorcheh_client.documents.upload(
+                    namespace_name=namespace,
+                    documents=[{"id": f"doc_{doc['id']}", "text": f"Document {name}: {content}"}]
+                )
+        except Exception as e:
+            print(f"Failed to index document: {e}")
+
+        print(f"✓ Uploaded document for user {user_id}: {name}")
+
+        return jsonify({"message": "Document uploaded", "documentId": doc['id']})
+
+    except Exception as e:
+        print(f"Error in upload_medical_document: {e}")
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================

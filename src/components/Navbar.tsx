@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { TreePine, User, LogOut, Menu, X, Settings } from 'lucide-react';
+import { TreePine, User, LogOut, Menu, X, Settings, MessageCircle } from 'lucide-react';
 import { useState } from 'react';
 
 export function Navbar() {
@@ -46,11 +46,17 @@ export function Navbar() {
                 >
                   My Challenges
                 </Link>
-                <Link 
-                  to="/create-challenge" 
+                <Link
+                  to="/create-challenge"
                   className={`font-medium transition-colors ${isActive('/create-challenge') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
                 >
                   Create
+                </Link>
+                <Link
+                  to="/coach"
+                  className={`font-medium transition-colors ${isActive('/coach') ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Coach
                 </Link>
               </>
             )}
@@ -102,6 +108,7 @@ export function Navbar() {
                   <Link to="/challenges" className="px-4 py-2 rounded-lg hover:bg-muted">Challenges</Link>
                   <Link to="/my-challenges" className="px-4 py-2 rounded-lg hover:bg-muted">My Challenges</Link>
                   <Link to="/create-challenge" className="px-4 py-2 rounded-lg hover:bg-muted">Create</Link>
+                  <Link to="/coach" className="px-4 py-2 rounded-lg hover:bg-muted">Coach</Link>
                   <Link to="/profile" className="px-4 py-2 rounded-lg hover:bg-muted">Profile</Link>
                   <button onClick={handleLogout} className="px-4 py-2 rounded-lg hover:bg-muted text-left text-destructive">Logout</button>
                 </>

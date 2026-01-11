@@ -240,12 +240,119 @@ export const challengeAPI = {
 };
 
 // ============================================================================
+// USERS API
+// ============================================================================
+
+export interface UserInfo {
+  id: string;
+  username: string;
+  email: string;
+}
+
+export const usersAPI = {
+  async getUsersBatch(userIds: string[]): Promise<{ users: Record<string, UserInfo> }> {
+    const response = await fetch(`${API_BASE_URL}/users/batch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ user_ids: userIds }),
+    });
+    return handleResponse(response);
+  },
+};
+
+// ============================================================================
 // REPS API
 // ============================================================================
 
 export const repsAPI = {
   async processReps(): Promise<Record<string, number>> {
     const response = await fetch(`${API_BASE_URL}/reps/process`);
+    return handleResponse(response);
+  },
+};
+
+// ============================================================================
+// COACH API
+// ============================================================================
+
+export const coachAPI = {
+  async sendMessage(message: string): Promise<{ response: string; context_used: boolean }> {
+    const response = await authenticatedFetch(`/coach/chat`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+    return handleResponse(response);
+  },
+
+  async getHistory(): Promise<{ messages: Array<{ role: string; content: string; timestamp: string }> }> {
+    const response = await authenticatedFetch(`/coach/history`);
+    return handleResponse(response);
+  },
+
+  async clearHistory(): Promise<void> {
+    const response = await authenticatedFetch(`/coach/history`, {
+      method: 'DELETE',
+    });
+    return handleResponse(response);
+  },
+
+  async getMedicalInfo(): Promise<{
+    goals: string;
+    medicalHistory: string;
+    physicalStatus: string;
+    concerns: string;
+    dietaryRestrictions: string;
+  }> {
+    const response = await authenticatedFetch(`/coach/medical-info`);
+    return handleResponse(response);
+  },
+
+  async updateMedicalInfo(data: {
+    goals?: string;
+    medicalHistory?: string;
+    physicalStatus?: string;
+    concerns?: string;
+    dietaryRestrictions?: string;
+  }): Promise<void> {
+    const response = await authenticatedFetch(`/coach/medical-info`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  async uploadDocument(name: string, content: string): Promise<{ documentId: string }> {
+    const response = await authenticatedFetch(`/coach/upload-document`, {
+      method: 'POST',
+      body: JSON.stringify({ name, content }),
+    });
+    return handleResponse(response);
+  },
+
+  async getCoachSettings(): Promise<{
+    tonePreference: string;
+    responseLength: string;
+    motivationLevel: string;
+    focusAreas: string[];
+    notificationPreference: string;
+  }> {
+    const response = await authenticatedFetch(`/coach/settings`);
+    return handleResponse(response);
+  },
+
+  async updateCoachSettings(data: {
+    tonePreference?: string;
+    responseLength?: string;
+    motivationLevel?: string;
+    focusAreas?: string[];
+    notificationPreference?: string;
+  }): Promise<void> {
+    const response = await authenticatedFetch(`/coach/settings`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
     return handleResponse(response);
   },
 };

@@ -14,6 +14,7 @@ import ChallengeContributors from "./pages/ChallengeContributors";
 import MyChallenges from "./pages/MyChallenges";
 import CreateChallenge from "./pages/CreateChallenge";
 import Profile from "./pages/Profile";
+import Consultant from "./pages/Consultant";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
               <Route path="/my-challenges" element={<MyChallenges />} />
               <Route path="/create-challenge" element={<CreateChallenge />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/coach" element={<Consultant />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
