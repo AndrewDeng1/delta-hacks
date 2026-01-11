@@ -254,47 +254,51 @@ class ExerciseDetector:
         return rep_completed
 
     def detect_high_knees(self, landmarks) -> bool:
-        """Detect high knees with hysteresis and cycle completion"""
+        """Detect high knees using angle-based detection with hysteresis"""
         # Get relevant landmarks
         left_hip = landmarks[PoseLandmark.LEFT_HIP]
         right_hip = landmarks[PoseLandmark.RIGHT_HIP]
         left_knee = landmarks[PoseLandmark.LEFT_KNEE]
         right_knee = landmarks[PoseLandmark.RIGHT_KNEE]
+        left_ankle = landmarks[PoseLandmark.LEFT_ANKLE]
+        right_ankle = landmarks[PoseLandmark.RIGHT_ANKLE]
 
-        # Calculate hip-to-knee vertical distance (negative y means higher on screen)
-        left_height = left_hip.y - left_knee.y
-        right_height = right_hip.y - right_knee.y
+        # Calculate angles between hip-knee-ankle for each leg
+        left_angle = calculate_angle(left_hip, left_knee, left_ankle)
+        right_angle = calculate_angle(right_hip, right_knee, right_ankle)
 
         # HYSTERESIS THRESHOLDS - wide margin prevents flickering
-        UP_THRESHOLD = 0.12      # Knee must be THIS high to register "up"
-        DOWN_THRESHOLD = 0.06    # Knee must be THIS low to register "down"
+        # Small angle = knee raised high (bent)
+        # Large angle = leg straight down
+        UP_THRESHOLD = 90       # Angle must be LESS than this when knee is up
+        DOWN_THRESHOLD = 140    # Angle must be MORE than this when leg is down
 
         rep_completed = False
 
-        # LEFT LEG: Check for complete cycle (up → down)
-        if left_height > UP_THRESHOLD and not self.left_knee_was_up:
-            # Knee just crossed UP threshold
+        # LEFT LEG: Check for complete cycle (knee up → knee down)
+        if left_angle < UP_THRESHOLD and not self.left_knee_was_up:
+            # Knee angle is small - knee is raised UP
             self.left_knee_was_up = True
-            print(f"[HIGH KNEES] Left knee UP: {left_height:.3f}")
+            print(f"[HIGH KNEES] Left knee UP: angle={left_angle:.1f}°")
 
-        elif left_height < DOWN_THRESHOLD and self.left_knee_was_up:
-            # Knee just crossed DOWN threshold - CYCLE COMPLETE
+        elif left_angle > DOWN_THRESHOLD and self.left_knee_was_up:
+            # Knee angle is large - leg is DOWN - CYCLE COMPLETE
             self.left_knee_was_up = False
             rep_completed = True
-            print(f"[HIGH KNEES] Left knee DOWN: {left_height:.3f} → REP!")
+            print(f"[HIGH KNEES] Left knee DOWN: angle={left_angle:.1f}° → REP!")
 
-        # RIGHT LEG: Check for complete cycle (up → down)
+        # RIGHT LEG: Check for complete cycle (knee up → knee down)
         # Note: Can check both legs in same frame, they're independent
-        if right_height > UP_THRESHOLD and not self.right_knee_was_up:
-            # Knee just crossed UP threshold
+        if right_angle < UP_THRESHOLD and not self.right_knee_was_up:
+            # Knee angle is small - knee is raised UP
             self.right_knee_was_up = True
-            print(f"[HIGH KNEES] Right knee UP: {right_height:.3f}")
+            print(f"[HIGH KNEES] Right knee UP: angle={right_angle:.1f}°")
 
-        elif right_height < DOWN_THRESHOLD and self.right_knee_was_up:
-            # Knee just crossed DOWN threshold - CYCLE COMPLETE
+        elif right_angle > DOWN_THRESHOLD and self.right_knee_was_up:
+            # Knee angle is large - leg is DOWN - CYCLE COMPLETE
             self.right_knee_was_up = False
             rep_completed = True
-            print(f"[HIGH KNEES] Right knee DOWN: {right_height:.3f} → REP!")
+            print(f"[HIGH KNEES] Right knee DOWN: angle={right_angle:.1f}° → REP!")
 
         return rep_completed
 
@@ -586,16 +590,19 @@ def main():
 
                 # Debug info for high knees
                 elif detector.target_exercise == ExerciseType.HIGH_KNEES:
-                    # Calculate knee heights
-                    left_hip = landmarks[PoseLandmark.LEFT_HIP]
-                    right_hip = landmarks[PoseLandmark.RIGHT_HIP]
-                    left_knee = landmarks[PoseLandmark.LEFT_KNEE]
-                    right_knee = landmarks[PoseLandmark.RIGHT_KNEE]
+                    # Calculate knee angles
+                    left_angle = calculate_angle(
+                        landmarks[PoseLandmark.LEFT_HIP],
+                        landmarks[PoseLandmark.LEFT_KNEE],
+                        landmarks[PoseLandmark.LEFT_ANKLE]
+                    )
+                    right_angle = calculate_angle(
+                        landmarks[PoseLandmark.RIGHT_HIP],
+                        landmarks[PoseLandmark.RIGHT_KNEE],
+                        landmarks[PoseLandmark.RIGHT_ANKLE]
+                    )
 
-                    left_height = left_hip.y - left_knee.y
-                    right_height = right_hip.y - right_knee.y
-
-                    # Show high knee state and heights at bottom
+                    # Show high knee state and angles at bottom
                     debug_bg = frame.copy()
                     cv2.rectangle(debug_bg, (0, h-105), (500, h), (0, 0, 0), -1)
                     cv2.addWeighted(debug_bg, 0.6, frame, 0.4, 0, frame)
@@ -606,25 +613,25 @@ def main():
                     cv2.putText(frame, f"States: L={left_state} R={right_state}",
                                (10, h-75), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
 
-                    # Color code knee heights based on hysteresis thresholds
-                    # Green if > UP threshold (0.12), Yellow if in hysteresis zone, White if < DOWN threshold (0.06)
-                    if left_height > 0.12:
-                        left_color = (0, 255, 0)  # Green - UP
-                    elif left_height > 0.06:
+                    # Color code knee angles based on hysteresis thresholds
+                    # Green if < UP threshold (90°), Yellow if in hysteresis zone, White if > DOWN threshold (140°)
+                    if left_angle < 90:
+                        left_color = (0, 255, 0)  # Green - UP (small angle)
+                    elif left_angle < 140:
                         left_color = (0, 255, 255)  # Yellow - Hysteresis zone
                     else:
-                        left_color = (255, 255, 255)  # White - DOWN
+                        left_color = (255, 255, 255)  # White - DOWN (large angle)
 
-                    if right_height > 0.12:
-                        right_color = (0, 255, 0)  # Green - UP
-                    elif right_height > 0.06:
+                    if right_angle < 90:
+                        right_color = (0, 255, 0)  # Green - UP (small angle)
+                    elif right_angle < 140:
                         right_color = (0, 255, 255)  # Yellow - Hysteresis zone
                     else:
-                        right_color = (255, 255, 255)  # White - DOWN
+                        right_color = (255, 255, 255)  # White - DOWN (large angle)
 
-                    cv2.putText(frame, f"Left: {left_height:.3f} (up>0.12, down<0.06)",
+                    cv2.putText(frame, f"Left: {left_angle:.1f}° (up<90, down>140)",
                                (10, h-45), cv2.FONT_HERSHEY_SIMPLEX, 0.45, left_color, 1)
-                    cv2.putText(frame, f"Right: {right_height:.3f} (up>0.12, down<0.06)",
+                    cv2.putText(frame, f"Right: {right_angle:.1f}° (up<90, down>140)",
                                (10, h-20), cv2.FONT_HERSHEY_SIMPLEX, 0.45, right_color, 1)
             else:
                 # No pose detected - still show camera feed with instructions
