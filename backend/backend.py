@@ -145,6 +145,8 @@ def clean_reasoning_tags(text):
     import re
     # Remove <think>...</think> blocks (including multiline)
     cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    # Remove unclosed <think> tags (everything from <think> to end)
+    cleaned = re.sub(r'<think>.*', '', cleaned, flags=re.DOTALL)
     # Clean up extra whitespace
     cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)
     return cleaned.strip()
@@ -162,9 +164,12 @@ COACH_SYSTEM_PROMPT = """You're texting the user as their gym coach. Text like a
 - Use casual language, contractions (you're, let's, etc)
 - Skip formalities - just get to the point
 - Include challenge links: http://localhost:8080/challenges/{id}
+- NO thinking tags or internal reasoning - just respond directly
 
 **Tool:** Need data? Use: TOOL: GET_DATA
 Returns all challenges and user info.
+
+**IMPORTANT:** When you get challenge data from the tool, use the ACTUAL challenge IDs from the data (the "id" field). Never make up fake IDs.
 
 Text naturally. Don't mention the tool."""
 
@@ -394,6 +399,14 @@ def get_ai_response(user_message, chat_history, rag_context, user_id, coach_sett
 
         messages = [{"role": "system", "content": system_prompt}]
 
+        # Add RAG context if available
+        if rag_context:
+            messages.append({
+                "role": "system",
+                "content": f"**Relevant Context from User's History:**\n{rag_context}\n\nUse this context to personalize your response."
+            })
+            print(f"[RAG Context Added] {len(rag_context)} characters")
+
         # Add recent chat history (last 6 messages)
         recent_history = chat_history[-6:] if len(chat_history) > 6 else chat_history
         for msg in recent_history:
@@ -411,7 +424,7 @@ def get_ai_response(user_message, chat_history, rag_context, user_id, coach_sett
             model="qwen-3-32b",
             messages=messages,
             temperature=0.8,
-            max_tokens=300
+            max_tokens=800  # Higher for reasoning models (thinking + response)
         )
 
         ai_content = response.choices[0].message.content
@@ -454,14 +467,14 @@ def get_ai_response(user_message, chat_history, rag_context, user_id, coach_sett
                 messages.append({"role": "assistant", "content": ai_content})
                 messages.append({
                     "role": "system",
-                    "content": f"Data:\n\n{chr(10).join(tool_results)}\n\nText back like a real person. 1-2 short sentences. Include challenge links."
+                    "content": f"Data:\n\n{chr(10).join(tool_results)}\n\nText back like a real person. 1-2 short sentences. IMPORTANT: Use the ACTUAL challenge IDs from the data above in your links. Format: http://localhost:8080/challenges/{{actual_id_from_data}}"
                 })
 
                 response = cerebras_client.chat.completions.create(
                     model="qwen-3-32b",
                     messages=messages,
                     temperature=0.8,
-                    max_tokens=300
+                    max_tokens=800  # Higher for reasoning models (thinking + response)
                 )
 
                 ai_content = response.choices[0].message.content

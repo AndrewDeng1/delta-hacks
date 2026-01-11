@@ -7,6 +7,16 @@ import { CoachSettingsDialog } from '@/components/CoachSettingsDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { coachAPI } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Settings, Trash2, Bot, User } from 'lucide-react';
@@ -48,6 +58,7 @@ export default function Consultant() {
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [medicalInfoOpen, setMedicalInfoOpen] = useState(false);
   const [coachSettingsOpen, setCoachSettingsOpen] = useState(false);
+  const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -149,14 +160,15 @@ export default function Consultant() {
     }
   };
 
-  const handleClearHistory = async () => {
-    // Use browser confirm dialog
-    const confirmed = window.confirm('Clear all chat history? This cannot be undone.');
-    if (!confirmed) return;
+  const handleClearHistory = () => {
+    setClearHistoryOpen(true);
+  };
 
+  const confirmClearHistory = async () => {
     try {
       await coachAPI.clearHistory();
       setMessages([WELCOME_MESSAGE]);
+      setClearHistoryOpen(false);
       toast({
         title: 'History cleared',
         description: 'Your chat history has been cleared',
@@ -261,6 +273,21 @@ export default function Consultant() {
 
       <CoachSettingsDialog open={coachSettingsOpen} onOpenChange={setCoachSettingsOpen} />
       <MedicalInfoDialog open={medicalInfoOpen} onOpenChange={setMedicalInfoOpen} />
+
+      <AlertDialog open={clearHistoryOpen} onOpenChange={setClearHistoryOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear all chat history?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all your conversations with the coach. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmClearHistory}>Clear History</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
