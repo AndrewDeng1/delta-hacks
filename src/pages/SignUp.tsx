@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
-import { TreePine, Loader2 } from 'lucide-react';
+import { TreePine, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function SignUp() {
@@ -14,24 +14,49 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [usernameError, setUsernameError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const { signup } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setUsernameError('');
+    setEmailError('');
+    setPasswordError('');
+
+    // Validate username
+    if (username.length < 3) {
+      setUsernameError('Username must be at least 3 characters');
+      return;
+    }
+
+    // Validate email format
+    if (!validateEmail(email)) {
+      setEmailError('Please enter a valid email address');
+      return;
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      setPasswordError('Password must be at least 6 characters');
+      return;
+    }
+
     if (password !== confirmPassword) {
-      toast({
-        title: 'Passwords don\'t match',
-        description: 'Please make sure your passwords match.',
-        variant: 'destructive',
-      });
+      setPasswordError('Passwords don\'t match');
       return;
     }
 
     setLoading(true);
-    
+
     try {
       await signup(username, email, password);
       toast({
@@ -39,12 +64,39 @@ export default function SignUp() {
         description: 'Your account has been created successfully.',
       });
       navigate('/challenges');
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to create account. Please try again.',
-        variant: 'destructive',
-      });
+    } catch (error: any) {
+      console.error('Signup error:', error);
+
+      // Check if user was created but login failed
+      if (error?.userCreated) {
+        toast({
+          title: 'Account Created!',
+          description: 'Your account was created successfully. Please sign in.',
+        });
+        navigate('/signin');
+        return;
+      }
+
+      // Extract the actual error message
+      const errorMessage = error?.message || error?.error || 'Failed to create account. Please try again.';
+
+      // Check for specific error types and set field errors
+      if (errorMessage.toLowerCase().includes('email already')) {
+        setEmailError('This email is already registered');
+      } else if (errorMessage.toLowerCase().includes('email')) {
+        setEmailError(errorMessage);
+      } else if (errorMessage.toLowerCase().includes('username')) {
+        setUsernameError(errorMessage);
+      } else if (errorMessage.toLowerCase().includes('password')) {
+        setPasswordError(errorMessage);
+      } else {
+        // Generic error - show in toast
+        toast({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -71,9 +123,20 @@ export default function SignUp() {
                 type="text"
                 placeholder="Your display name"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setUsernameError('');
+                }}
+                className={usernameError ? 'border-destructive' : ''}
                 required
+                minLength={3}
               />
+              {usernameError && (
+                <div className="flex items-center gap-2 text-destructive text-sm">
+                  <AlertCircle className="h-4 w-4" />
+                  {usernameError}
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -82,9 +145,19 @@ export default function SignUp() {
                 type="email"
                 placeholder="you@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setEmailError('');
+                }}
+                className={emailError ? 'border-destructive' : ''}
                 required
               />
+              {emailError && (
+                <div className="flex items-center gap-2 text-destructive text-sm">
+                  <AlertCircle className="h-4 w-4" />
+                  {emailError}
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
@@ -93,10 +166,20 @@ export default function SignUp() {
                 type="password"
                 placeholder="••••••••"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setPasswordError('');
+                }}
+                className={passwordError ? 'border-destructive' : ''}
                 required
                 minLength={6}
               />
+              {passwordError && (
+                <div className="flex items-center gap-2 text-destructive text-sm">
+                  <AlertCircle className="h-4 w-4" />
+                  {passwordError}
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
@@ -105,7 +188,11 @@ export default function SignUp() {
                 type="password"
                 placeholder="••••••••"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setPasswordError('');
+                }}
+                className={passwordError ? 'border-destructive' : ''}
                 required
               />
             </div>

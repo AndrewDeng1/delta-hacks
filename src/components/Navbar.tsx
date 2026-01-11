@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { TreePine, User, LogOut, Menu, X } from 'lucide-react';
@@ -7,9 +7,16 @@ import { useState } from 'react';
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isActive = (path: string) => location.pathname === path;
+
+  const handleLogout = () => {
+    logout();
+    setMobileMenuOpen(false);
+    navigate('/');
+  };
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-lg">
@@ -59,7 +66,7 @@ export function Navbar() {
                     {user?.username}
                   </Button>
                 </Link>
-                <Button variant="outline" size="sm" onClick={logout} className="gap-2">
+                <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
                   <LogOut className="h-4 w-4" />
                   Logout
                 </Button>
@@ -95,7 +102,7 @@ export function Navbar() {
                   <Link to="/my-challenges" className="px-4 py-2 rounded-lg hover:bg-muted">My Challenges</Link>
                   <Link to="/create-challenge" className="px-4 py-2 rounded-lg hover:bg-muted">Create</Link>
                   <Link to="/profile" className="px-4 py-2 rounded-lg hover:bg-muted">Profile</Link>
-                  <button onClick={logout} className="px-4 py-2 rounded-lg hover:bg-muted text-left text-destructive">Logout</button>
+                  <button onClick={handleLogout} className="px-4 py-2 rounded-lg hover:bg-muted text-left text-destructive">Logout</button>
                 </>
               ) : (
                 <>

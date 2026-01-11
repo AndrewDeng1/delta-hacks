@@ -20,14 +20,22 @@ import json
 
 # Load environment variables
 def load_env():
-    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    # Try backend/.env first, then parent directory .env
+    backend_env_path = os.path.join(os.path.dirname(__file__), ".env")
+    parent_env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+
+    env_path = backend_env_path if os.path.exists(backend_env_path) else parent_env_path
+
     if os.path.exists(env_path):
+        print(f"Loading environment from: {os.path.abspath(env_path)}")
         with open(env_path) as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     key, value = line.split("=", 1)
                     os.environ[key.strip()] = value.strip()
+    else:
+        print("Warning: No .env file found")
 
 load_env()
 
@@ -222,11 +230,11 @@ def login():
         user = users_collection.find_one({"email": email})
 
         if not user:
-            return jsonify({'error': 'Invalid email or password'}), 401
+            return jsonify({'error': 'No account found with this email'}), 401
 
         # Verify password
         if not verify_password(password, user["passwordHash"]):
-            return jsonify({'error': 'Invalid email or password'}), 401
+            return jsonify({'error': 'Incorrect password'}), 401
 
         # Create access token
         access_token = create_access_token(data={"sub": str(user["_id"])})
@@ -294,6 +302,41 @@ def create_challenge():
         return jsonify({'challenge_id': str(result.inserted_id)}), 201
 
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/challenges', methods=['GET'])
+def get_challenges():
+    """Get all challenges"""
+    print("getting challenges!")
+    try:
+        # Fetch all challenges from database
+        challenges_cursor = challenges_collection.find({})
+
+        print("challenges: ", challenges_cursor)
+
+        challenges = []
+        for challenge in challenges_cursor:
+            # Serialize the challenge document
+            challenge_dict = serialize_doc(challenge)
+
+            # Convert dates to ISO format strings
+            if 'startDate' in challenge_dict:
+                challenge_dict['startDate'] = challenge['startDate'].isoformat()
+            if 'endDate' in challenge_dict:
+                challenge_dict['endDate'] = challenge['endDate'].isoformat()
+            if 'createdAt' in challenge_dict:
+                challenge_dict['createdAt'] = challenge['createdAt'].isoformat()
+
+            challenges.append(challenge_dict)
+
+        print(f"✓ Fetched {len(challenges)} challenges from database")
+        for idx, ch in enumerate(challenges, 1):
+            print(f"  {idx}. {ch['name']} (ID: {ch['_id']})")
+
+        return jsonify({'challenges': challenges}), 200
+
+    except Exception as e:
+        print(f"✗ Error fetching challenges: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/challenges/<challenge_id>', methods=['DELETE'])

@@ -11,6 +11,7 @@ import { CustomRewardModal } from '@/components/CustomRewardModal';
 import { EXERCISE_LABELS, ExerciseType } from '@/types';
 import { ArrowLeft, TreePine, DollarSign, Waves, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { challengeAPI } from '@/lib/api';
 
 export default function CreateChallenge() {
   const navigate = useNavigate();
@@ -118,7 +119,7 @@ export default function CreateChallenge() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (formData.enabledExercises.length === 0) {
       toast({
         title: 'Please select at least one exercise',
@@ -144,17 +145,100 @@ export default function CreateChallenge() {
       return;
     }
 
+    // Validate that enabled exercises have goals and rewards set
+    for (const exercise of formData.enabledExercises) {
+      if (!formData.repGoals[exercise] || parseInt(formData.repGoals[exercise]) <= 0) {
+        toast({
+          title: 'Missing goal',
+          description: `Please set a rep goal for ${EXERCISE_LABELS[exercise]}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (!formData.repRewards[exercise].amount || parseFloat(formData.repRewards[exercise].amount) <= 0) {
+        toast({
+          title: 'Missing reward',
+          description: `Please set a contribution amount for ${EXERCISE_LABELS[exercise]}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (!formData.repRewards[exercise].perReps || parseInt(formData.repRewards[exercise].perReps) <= 0) {
+        toast({
+          title: 'Missing reps',
+          description: `Please set "per X reps" for ${EXERCISE_LABELS[exercise]}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     setLoading(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    toast({
-      title: 'Challenge Created! 🎉',
-      description: 'Your challenge is now live.',
-    });
-    
-    navigate('/my-challenges');
+
+    try {
+      // Transform form data to match backend format
+      const rep_goal: Record<string, number> = {};
+      const rep_reward: Record<string, [number, number]> = {};
+      const rep_reward_type: Record<string, string> = {};
+
+      // Get reward label based on type
+      const rewardLabel = formData.rewardType === 'custom' ? customRewardLabel : getRewardLabel();
+
+      formData.enabledExercises.forEach(exercise => {
+        rep_goal[exercise] = parseInt(formData.repGoals[exercise]);
+        rep_reward[exercise] = [
+          parseFloat(formData.repRewards[exercise].amount),
+          parseInt(formData.repRewards[exercise].perReps)
+        ];
+        rep_reward_type[exercise] = rewardLabel;
+      });
+
+      // Convert dates to ISO format
+      const startDate = new Date(formData.startDate).toISOString();
+      const endDate = new Date(formData.endDate).toISOString();
+
+      console.log('Creating challenge with data:', {
+        name: formData.name,
+        description: formData.description,
+        enabled_exercises: formData.enabledExercises,
+        rep_goal,
+        rep_reward,
+        rep_reward_type,
+        completion_reward: formData.completionReward,
+        start_date: startDate,
+        end_date: endDate,
+      });
+
+      const response = await challengeAPI.createChallenge({
+        name: formData.name,
+        description: formData.description,
+        enabled_exercises: formData.enabledExercises,
+        rep_goal,
+        rep_reward,
+        rep_reward_type,
+        completion_reward: formData.completionReward,
+        start_date: startDate,
+        end_date: endDate,
+      });
+
+      console.log('Challenge created:', response);
+
+      toast({
+        title: 'Challenge Created! 🎉',
+        description: 'Your challenge is now live.',
+      });
+
+      navigate('/my-challenges');
+    } catch (error: any) {
+      console.error('Failed to create challenge:', error);
+      toast({
+        title: 'Failed to create challenge',
+        description: error?.message || 'An error occurred. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

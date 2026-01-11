@@ -50,14 +50,18 @@ export default function SignIn() {
       });
       navigate('/challenges');
     } catch (error: any) {
-      // Check error type to show specific message
-      if (error?.message?.includes('email') || error?.code === 'auth/user-not-found') {
+      console.error('Login error:', error);
+
+      const errorMessage = error?.message || '';
+
+      // Check for specific error messages from backend
+      if (errorMessage.includes('No account found') || errorMessage.includes('email')) {
         setEmailError('No account found with this email');
-      } else if (error?.message?.includes('password') || error?.code === 'auth/wrong-password') {
+      } else if (errorMessage.includes('Incorrect password') || errorMessage.includes('password')) {
         setPasswordError('Incorrect password');
       } else {
-        // Generic error for mock auth
-        setPasswordError('Invalid email or password');
+        // Generic error - show in password field
+        setPasswordError(errorMessage || 'Invalid email or password');
       }
     } finally {
       setLoading(false);
