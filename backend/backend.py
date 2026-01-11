@@ -163,13 +163,17 @@ COACH_SYSTEM_PROMPT = """You're texting the user as their gym coach. Text like a
 - Multiple short messages > one long message
 - Use casual language, contractions (you're, let's, etc)
 - Skip formalities - just get to the point
-- Include challenge links: http://localhost:8080/challenges/{id}
 - NO thinking tags or internal reasoning - just respond directly
 
 **Tool:** Need data? Use: TOOL: GET_DATA
 Returns all challenges and user info.
 
-**IMPORTANT:** When you get challenge data from the tool, use the ACTUAL challenge IDs from the data (the "id" field). Never make up fake IDs.
+**CRITICAL - CHALLENGE LINKS:**
+When recommending challenges, use the EXACT "id" value from the tool data.
+Example: If tool returns {"id": "678a1b2c3d4e5f6789012345", "name": "Upper Body"},
+you MUST use: http://localhost:8080/challenges/678a1b2c3d4e5f6789012345
+
+NEVER use fake IDs like /challenges/1 or /challenges/9.
 
 Text naturally. Don't mention the tool."""
 
@@ -350,7 +354,13 @@ def get_tool_data(tool_name, user_id):
                 }
             }
 
-            return json.dumps(result, indent=2)
+            # Add a summary at the top to make IDs super obvious
+            output = "CHALLENGE IDS (use these exact values in links):\n"
+            for ch in challenges_data[:5]:  # Show first 5
+                output += f"- {ch['name']}: ID = {ch['id']}\n"
+            output += f"\nFull data:\n{json.dumps(result, indent=2)}"
+
+            return output
 
         return ""
     except Exception as e:
@@ -461,13 +471,32 @@ def get_ai_response(user_message, chat_history, rag_context, user_id, coach_sett
                 data = get_tool_data(tool_name, user_id)
                 if data:
                     tool_results.append(f"{tool_name} Results:\n{data}")
+                    # Log first challenge ID for debugging
+                    try:
+                        import json
+                        parsed = json.loads(data)
+                        if parsed.get('all_challenges'):
+                            first_id = parsed['all_challenges'][0]['id']
+                            print(f"[DEBUG] First challenge ID in data: {first_id}")
+                    except:
+                        pass
 
             # Second call with tool results
             if tool_results:
                 messages.append({"role": "assistant", "content": ai_content})
                 messages.append({
                     "role": "system",
-                    "content": f"Data:\n\n{chr(10).join(tool_results)}\n\nText back like a real person. 1-2 short sentences. IMPORTANT: Use the ACTUAL challenge IDs from the data above in your links. Format: http://localhost:8080/challenges/{{actual_id_from_data}}"
+                    "content": f"""Data:
+
+{chr(10).join(tool_results)}
+
+Text back like a real person. 1-2 short sentences.
+
+CRITICAL: When sharing challenge links, copy the EXACT "id" value from the data above.
+Example: If you see {{"id": "678a1b2c3d4e5f6789012345", "name": "Squat Challenge"}},
+use: http://localhost:8080/challenges/678a1b2c3d4e5f6789012345
+
+Do NOT use fake IDs like /challenges/1 or /challenges/9. Use the real ID from the data."""
                 })
 
                 response = cerebras_client.chat.completions.create(

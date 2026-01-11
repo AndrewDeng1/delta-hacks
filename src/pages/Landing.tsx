@@ -134,26 +134,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Impact Stats */}
-      <section className="py-16 border-y border-border">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {[
-              { value: '50K+', label: 'Trees Planted', icon: TreePine, color: 'text-primary' },
-              { value: '1.2K', label: 'Lbs Ocean Waste', icon: Waves, color: 'text-ocean' },
-              { value: '$25K', label: 'Donated', icon: Heart, color: 'text-energy' },
-              { value: '10K+', label: 'Active Users', icon: Users, color: 'text-impact' },
-            ].map((stat, index) => (
-              <div key={index} className="text-center">
-                <stat.icon className={`h-8 w-8 mx-auto mb-3 ${stat.color}`} />
-                <div className="font-display text-4xl font-bold mb-1">{stat.value}</div>
-                <div className="text-muted-foreground">{stat.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* How It Works */}
       <section className="py-20">
         <div className="container mx-auto px-4">
