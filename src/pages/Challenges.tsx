@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { ChallengeCard } from '@/components/ChallengeCard';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Search, TreePine, Loader2 } from 'lucide-react';
@@ -13,9 +14,10 @@ export default function Challenges() {
   const [searchQuery, setSearchQuery] = useState('');
   const { user } = useAuth();
   const { toast } = useToast();
-  const [enrolledChallenges, setEnrolledChallenges] = useState<string[]>(user?.enrolledChallenges || []);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [challengeToLeave, setChallengeToLeave] = useState<string | null>(null);
 
   // Fetch challenges on mount
   useEffect(() => {
@@ -123,20 +125,72 @@ export default function Challenges() {
     );
   }
 
-  const handleEnroll = (challengeId: string) => {
-    setEnrolledChallenges([...enrolledChallenges, challengeId]);
-    toast({
-      title: 'Enrolled!',
-      description: 'You have joined the challenge.',
-    });
+  const handleEnroll = async (challengeId: string) => {
+    if (!user) return;
+
+    try {
+      await challengeAPI.enrollInChallenge(challengeId);
+
+      // Update local challenge state to reflect enrollment
+      setChallenges(prevChallenges =>
+        prevChallenges.map(c =>
+          c.id === challengeId
+            ? { ...c, enrolledUsers: [...c.enrolledUsers, user.id] }
+            : c
+        )
+      );
+
+      toast({
+        title: 'Enrolled!',
+        description: 'You have joined the challenge.',
+      });
+    } catch (error: any) {
+      console.error('Failed to enroll:', error);
+      toast({
+        title: 'Failed to enroll',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleUnenroll = (challengeId: string) => {
-    setEnrolledChallenges(enrolledChallenges.filter(id => id !== challengeId));
-    toast({
-      title: 'Left challenge',
-      description: 'You have left the challenge.',
-    });
+  const handleUnenrollClick = (challengeId: string) => {
+    setChallengeToLeave(challengeId);
+    setShowLeaveDialog(true);
+  };
+
+  const handleUnenroll = async () => {
+    if (!user || !challengeToLeave) return;
+
+    try {
+      await challengeAPI.unenrollFromChallenge(challengeToLeave);
+
+      // Update local challenge state to reflect unenrollment
+      setChallenges(prevChallenges =>
+        prevChallenges.map(c =>
+          c.id === challengeToLeave
+            ? { ...c, enrolledUsers: c.enrolledUsers.filter(id => id !== user.id) }
+            : c
+        )
+      );
+
+      setShowLeaveDialog(false);
+      setChallengeToLeave(null);
+
+      toast({
+        title: 'Left challenge',
+        description: 'You have left the challenge.',
+      });
+    } catch (error: any) {
+      console.error('Failed to unenroll:', error);
+      setShowLeaveDialog(false);
+      setChallengeToLeave(null);
+      toast({
+        title: 'Failed to leave challenge',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -180,9 +234,9 @@ export default function Challenges() {
                   <ChallengeCard
                     key={challenge.id}
                     challenge={challenge}
-                    userEnrolled={enrolledChallenges.includes(challenge.id)}
+                    userEnrolled={user ? challenge.enrolledUsers.includes(user.id) : false}
                     onEnroll={() => handleEnroll(challenge.id)}
-                    onLeave={() => handleUnenroll(challenge.id)}
+                    onLeave={() => handleUnenrollClick(challenge.id)}
                   />
                 ))}
               </div>
@@ -201,7 +255,7 @@ export default function Challenges() {
                   <ChallengeCard
                     key={challenge.id}
                     challenge={challenge}
-                    userEnrolled={enrolledChallenges.includes(challenge.id)}
+                    userEnrolled={user ? challenge.enrolledUsers.includes(user.id) : false}
                   />
                 ))}
               </div>
@@ -213,6 +267,17 @@ export default function Challenges() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Leave Challenge Confirmation */}
+      <ConfirmDialog
+        open={showLeaveDialog}
+        onOpenChange={setShowLeaveDialog}
+        title="Leave Challenge?"
+        description="This will remove all your contributions to this challenge. This action cannot be undone."
+        confirmLabel="Leave Challenge"
+        variant="destructive"
+        onConfirm={handleUnenroll}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { ChallengeCard } from '@/components/ChallengeCard';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,60 +26,82 @@ import {
 export default function MyChallenges() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [createdChallenges, setCreatedChallenges] = useState<Challenge[]>([]);
+  const [enrolledList, setEnrolledList] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [challengeToLeave, setChallengeToLeave] = useState<string | null>(null);
+
+  // Helper function to transform API challenge to frontend format
+  const transformChallenge = (apiChallenge: any): Challenge | null => {
+    try {
+      // Handle repReward - can be either array [amount, perReps] or just a number
+      const repReward: any = {};
+      Object.entries(apiChallenge.repReward).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          repReward[key] = { amount: value[0], perReps: value[1] };
+        } else {
+          repReward[key] = { amount: value as number, perReps: 1 };
+        }
+      });
+
+      return {
+        id: apiChallenge._id,
+        name: apiChallenge.name,
+        creatorId: apiChallenge.creatorUserId,
+        creatorName: 'User',
+        description: apiChallenge.description,
+        enabledExercises: apiChallenge.enabledExercises as any,
+        userContributions: apiChallenge.contributions,
+        enrolledUsers: apiChallenge.participants,
+        repGoal: apiChallenge.repGoal as any,
+        repReward: repReward,
+        repRewardType: Object.values(apiChallenge.repRewardType)[0] || 'trees planted',
+        completionReward: apiChallenge.completionReward,
+        startDate: new Date(apiChallenge.startDate),
+        endDate: new Date(apiChallenge.endDate),
+        isCompleted: apiChallenge.completed,
+      };
+    } catch (error) {
+      console.error('Failed to transform challenge:', error, apiChallenge);
+      return null;
+    }
+  };
 
   // Fetch user's challenges
   useEffect(() => {
-    const fetchMyChallenges = async () => {
+    const fetchChallenges = async () => {
+      if (!user) return;
+
       try {
-        console.log('Fetching my challenges...');
-        const response = await challengeAPI.getMyChallenges();
-        console.log('Fetched my challenges:', response);
+        console.log('Fetching created and enrolled challenges...');
 
-        // Transform API challenges to frontend format
-        const transformedChallenges: Challenge[] = [];
+        // Fetch both in parallel
+        const [myResponse, enrolledResponse] = await Promise.all([
+          challengeAPI.getMyChallenges(),
+          challengeAPI.getEnrolledChallenges(),
+        ]);
 
-        response.challenges.forEach((apiChallenge, index) => {
-          try {
-            // Handle repReward - can be either array [amount, perReps] or just a number
-            const repReward: any = {};
-            Object.entries(apiChallenge.repReward).forEach(([key, value]) => {
-              if (Array.isArray(value)) {
-                repReward[key] = { amount: value[0], perReps: value[1] };
-              } else {
-                repReward[key] = { amount: value as number, perReps: 1 };
-              }
-            });
+        console.log('Fetched created challenges:', myResponse);
+        console.log('Fetched enrolled challenges:', enrolledResponse);
 
-            const transformed: Challenge = {
-              id: apiChallenge._id,
-              name: apiChallenge.name,
-              creatorId: apiChallenge.creatorUserId,
-              creatorName: 'User',
-              description: apiChallenge.description,
-              enabledExercises: apiChallenge.enabledExercises as any,
-              userContributions: apiChallenge.contributions,
-              enrolledUsers: apiChallenge.participants,
-              repGoal: apiChallenge.repGoal as any,
-              repReward: repReward,
-              repRewardType: Object.values(apiChallenge.repRewardType)[0] || 'trees planted',
-              completionReward: apiChallenge.completionReward,
-              startDate: new Date(apiChallenge.startDate),
-              endDate: new Date(apiChallenge.endDate),
-              isCompleted: apiChallenge.completed,
-            };
+        // Transform created challenges (filter to only those created by user)
+        const transformedCreated = myResponse.challenges
+          .map(transformChallenge)
+          .filter((c): c is Challenge => c !== null && c.creatorId === user.id);
 
-            transformedChallenges.push(transformed);
-          } catch (transformError) {
-            console.error(`Failed to transform challenge ${index + 1}:`, transformError, apiChallenge);
-          }
-        });
+        // Transform enrolled challenges
+        const transformedEnrolled = enrolledResponse.challenges
+          .map(transformChallenge)
+          .filter((c): c is Challenge => c !== null);
 
-        console.log('Total transformed my challenges:', transformedChallenges.length);
-        setChallenges(transformedChallenges);
+        console.log('Created challenges:', transformedCreated.length);
+        console.log('Enrolled challenges:', transformedEnrolled.length);
+
+        setCreatedChallenges(transformedCreated);
+        setEnrolledList(transformedEnrolled);
       } catch (error) {
-        console.error('Failed to fetch my challenges:', error);
+        console.error('Failed to fetch challenges:', error);
         toast({
           title: 'Failed to load challenges',
           description: 'Please try refreshing the page.',
@@ -89,16 +112,8 @@ export default function MyChallenges() {
       }
     };
 
-    if (user) {
-      fetchMyChallenges();
-    }
+    fetchChallenges();
   }, [user, toast]);
-
-  // Separate challenges into created and enrolled
-  const createdChallenges = challenges.filter(c => c.creatorId === user?.id);
-  const enrolledList = challenges.filter(c =>
-    c.creatorId !== user?.id && c.enrolledUsers.includes(user?.id || '')
-  );
   
   const now = new Date();
   const activeCreated = createdChallenges.filter(
@@ -108,19 +123,72 @@ export default function MyChallenges() {
     c => c.isCompleted || now > c.endDate
   );
 
-  const handleUnenroll = async (challengeId: string) => {
+  const handleEnroll = async (challengeId: string) => {
+    if (!user) return;
+
     try {
-      await challengeAPI.unenrollFromChallenge(challengeId);
-      setChallenges(challenges.filter(c => c.id !== challengeId));
+      await challengeAPI.enrollInChallenge(challengeId);
+
+      // Update local state - add user to enrolledUsers
+      setCreatedChallenges(prevChallenges =>
+        prevChallenges.map(c =>
+          c.id === challengeId
+            ? { ...c, enrolledUsers: [...c.enrolledUsers, user.id] }
+            : c
+        )
+      );
+
+      toast({
+        title: 'Enrolled!',
+        description: 'You have joined your challenge.',
+      });
+    } catch (error: any) {
+      console.error('Failed to enroll:', error);
+      toast({
+        title: 'Failed to enroll',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleUnenrollClick = (challengeId: string) => {
+    setChallengeToLeave(challengeId);
+    setShowLeaveDialog(true);
+  };
+
+  const handleUnenroll = async () => {
+    if (!user || !challengeToLeave) return;
+
+    try {
+      await challengeAPI.unenrollFromChallenge(challengeToLeave);
+
+      // Update enrolled list
+      setEnrolledList(enrolledList.filter(c => c.id !== challengeToLeave));
+
+      // Update created challenges to reflect unenrollment
+      setCreatedChallenges(prevChallenges =>
+        prevChallenges.map(c =>
+          c.id === challengeToLeave
+            ? { ...c, enrolledUsers: c.enrolledUsers.filter(id => id !== user.id) }
+            : c
+        )
+      );
+
+      setShowLeaveDialog(false);
+      setChallengeToLeave(null);
+
       toast({
         title: 'Left challenge',
         description: 'You have left the challenge.',
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to unenroll:', error);
+      setShowLeaveDialog(false);
+      setChallengeToLeave(null);
       toast({
         title: 'Failed to leave challenge',
-        description: 'Please try again.',
+        description: error?.message || 'Please try again.',
         variant: 'destructive',
       });
     }
@@ -129,7 +197,7 @@ export default function MyChallenges() {
   const handleDelete = async (challengeId: string) => {
     try {
       await challengeAPI.deleteChallenge(challengeId);
-      setChallenges(challenges.filter(c => c.id !== challengeId));
+      setCreatedChallenges(createdChallenges.filter(c => c.id !== challengeId));
       toast({
         title: 'Challenge deleted',
         description: 'The challenge has been permanently deleted.',
@@ -197,8 +265,8 @@ export default function MyChallenges() {
                   <ChallengeCard
                     key={challenge.id}
                     challenge={challenge}
-                    userEnrolled={true}
-                    onLeave={() => handleUnenroll(challenge.id)}
+                    userEnrolled={user ? challenge.enrolledUsers.includes(user.id) : false}
+                    onLeave={() => handleUnenrollClick(challenge.id)}
                   />
                 ))}
               </div>
@@ -226,7 +294,13 @@ export default function MyChallenges() {
                 <h2 className="font-display text-xl font-semibold mb-4">Active</h2>
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {activeCreated.map((challenge) => (
-                    <ChallengeCard key={challenge.id} challenge={challenge} />
+                    <ChallengeCard
+                      key={challenge.id}
+                      challenge={challenge}
+                      userEnrolled={user ? challenge.enrolledUsers.includes(user.id) : false}
+                      onEnroll={() => handleEnroll(challenge.id)}
+                      onLeave={() => handleUnenrollClick(challenge.id)}
+                    />
                   ))}
                 </div>
               </div>
@@ -292,6 +366,17 @@ export default function MyChallenges() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Leave Challenge Confirmation */}
+      <ConfirmDialog
+        open={showLeaveDialog}
+        onOpenChange={setShowLeaveDialog}
+        title="Leave Challenge?"
+        description="This will remove all your contributions to this challenge. This action cannot be undone."
+        confirmLabel="Leave Challenge"
+        variant="destructive"
+        onConfirm={handleUnenroll}
+      />
     </div>
   );
 }

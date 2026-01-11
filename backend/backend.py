@@ -385,6 +385,43 @@ def get_my_challenges():
         print(f"✗ Error fetching user challenges: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/challenges/enrolled', methods=['GET'])
+@verify_token_decorator
+def get_enrolled_challenges():
+    """Get challenges where the logged-in user is enrolled (includes their own challenges if enrolled)"""
+    try:
+        user_id_str = request.user_id
+
+        # Find challenges where user is a participant
+        challenges_cursor = challenges_collection.find({
+            "participants": user_id_str
+        })
+
+        challenges = []
+        for challenge in challenges_cursor:
+            # Serialize the challenge document
+            challenge_dict = serialize_doc(challenge)
+
+            # Convert dates to ISO format strings
+            if 'startDate' in challenge_dict:
+                challenge_dict['startDate'] = challenge['startDate'].isoformat()
+            if 'endDate' in challenge_dict:
+                challenge_dict['endDate'] = challenge['endDate'].isoformat()
+            if 'createdAt' in challenge_dict:
+                challenge_dict['createdAt'] = challenge['createdAt'].isoformat()
+
+            challenges.append(challenge_dict)
+
+        print(f"✓ Fetched {len(challenges)} enrolled challenges for user {user_id_str}")
+        for idx, ch in enumerate(challenges, 1):
+            print(f"  {idx}. {ch['name']} (ID: {ch['_id']})")
+
+        return jsonify({'challenges': challenges}), 200
+
+    except Exception as e:
+        print(f"✗ Error fetching enrolled challenges: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/challenges/<challenge_id>', methods=['DELETE'])
 @verify_token_decorator
 def delete_challenge(challenge_id):
@@ -412,8 +449,32 @@ def delete_challenge(challenge_id):
                 'requesting_user_id': user_id_str
             }), 403
 
+        # Remove challenge from all enrolled users' enrolledChallenges arrays
+        challenge_obj_id = ObjectId(challenge_id)
+        participants = challenge.get('participants', [])
+
+        # Convert string participants to ObjectIds for user lookup
+        participant_ids = []
+        for participant in participants:
+            try:
+                if isinstance(participant, str):
+                    participant_ids.append(ObjectId(participant))
+                else:
+                    participant_ids.append(participant)
+            except:
+                continue
+
+        # Remove challenge from all enrolled users
+        if participant_ids:
+            users_collection.update_many(
+                {"_id": {"$in": participant_ids}},
+                {"$pull": {"enrolledChallenges": challenge_obj_id}}
+            )
+            print(f"✓ Removed challenge {challenge_id} from {len(participant_ids)} users' enrolledChallenges")
+
         # Delete challenge
-        challenges_collection.delete_one({"_id": ObjectId(challenge_id)})
+        challenges_collection.delete_one({"_id": challenge_obj_id})
+        print(f"✓ Deleted challenge {challenge_id}")
 
         return jsonify({
             'success': True,
@@ -472,14 +533,14 @@ def enroll_in_challenge(challenge_id):
             return jsonify({'error': 'Challenge not found'}), 404
 
         # Check if user is already enrolled
-        if user_id in challenge.get('participants', []):
+        if user_id_str in challenge.get('participants', []):
             return jsonify({'error': 'User already enrolled in this challenge'}), 400
 
-        # Add user to participants
+        # Add user to participants (store as string for consistency)
         challenges_collection.update_one(
             {"_id": ObjectId(challenge_id)},
             {
-                "$addToSet": {"participants": user_id},
+                "$addToSet": {"participants": user_id_str},
                 "$set": {f"contributions.{user_id_str}": {}}
             }
         )
@@ -510,14 +571,14 @@ def unenroll_from_challenge(challenge_id):
             return jsonify({'error': 'Challenge not found'}), 404
 
         # Check if user is enrolled in the challenge
-        if user_id not in challenge.get('participants', []):
+        if user_id_str not in challenge.get('participants', []):
             return jsonify({'error': 'User not enrolled in this challenge'}), 400
 
-        # Remove user from participants and contributions
+        # Remove user from participants and contributions (use string for consistency)
         challenges_collection.update_one(
             {"_id": ObjectId(challenge_id)},
             {
-                "$pull": {"participants": user_id},
+                "$pull": {"participants": user_id_str},
                 "$unset": {f"contributions.{user_id_str}": ""}
             }
         )

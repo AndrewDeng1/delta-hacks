@@ -132,6 +132,19 @@ export default function ChallengeDetail() {
   // Check if user is enrolled
   const enrolled = challenge.enrolledUsers.includes(user?.id || '');
 
+  // Debug logging
+  console.log('Challenge Detail Debug:', {
+    challengeId: challenge.id,
+    userId: user?.id,
+    isOwner,
+    enrolled,
+    isActive,
+    enrolledUsers: challenge.enrolledUsers,
+    startDate: challenge.startDate,
+    endDate: challenge.endDate,
+    now: now,
+  });
+
   // Calculate total reps per exercise
   const getTotalReps = (exercise: ExerciseType) => {
     return Object.values(challenge.userContributions).reduce(
@@ -153,12 +166,26 @@ export default function ChallengeDetail() {
     (sum, ex) => sum + getContributions(ex), 0
   );
 
-  // User contributions (mock data)
-  const mockUserContributions = [
-    { username: 'FitnessFan', reps: { jumping_jacks: 500, squats: 300, high_knees: 200 } },
-    { username: 'EcoRunner', reps: { jumping_jacks: 320, squats: 180, high_knees: 450 } },
-    { username: 'GreenWarrior', reps: { jumping_jacks: 280, squats: 220, high_knees: 150 } },
-  ];
+  // Calculate top contributors from actual challenge data
+  const getTopContributors = () => {
+    // Convert userContributions object to array with total reps
+    const contributorsArray = Object.entries(challenge.userContributions).map(([userId, reps]) => {
+      const totalReps = Object.values(reps).reduce((sum, r) => sum + (r as number), 0);
+      return {
+        userId,
+        username: userId === user?.id ? 'You' : `User ${userId.slice(-4)}`, // Show last 4 chars of ID
+        reps,
+        totalReps,
+      };
+    });
+
+    // Sort by total reps (descending) and take top 3
+    return contributorsArray
+      .sort((a, b) => b.totalReps - a.totalReps)
+      .slice(0, 3);
+  };
+
+  const topContributors = getTopContributors();
 
   const handleEnroll = async () => {
     if (!challenge || !id) return;
@@ -312,27 +339,27 @@ export default function ChallengeDetail() {
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3">
-              {isActive && (
+              {/* Show exercise/enroll buttons for active challenges */}
+              {isActive && enrolled && (
                 <>
-                  {enrolled ? (
-                    <>
-                      <Button variant="hero" size="lg" onClick={() => setShowSession(true)} className="gap-2">
-                        <Play className="h-5 w-5" />
-                        Start Exercising
-                      </Button>
-                      <Button variant="outline" size="lg" onClick={() => setShowLeaveDialog(true)} className="gap-2 text-destructive hover:text-destructive">
-                        <LogOut className="h-5 w-5" />
-                        Leave Challenge
-                      </Button>
-                    </>
-                  ) : (
-                    <Button variant="hero" size="lg" onClick={handleEnroll} className="gap-2">
-                      <Users className="h-5 w-5" />
-                      Join Challenge
-                    </Button>
-                  )}
+                  <Button variant="hero" size="lg" onClick={() => setShowSession(true)} className="gap-2">
+                    <Play className="h-5 w-5" />
+                    Start Exercising
+                  </Button>
+                  <Button variant="outline" size="lg" onClick={() => setShowLeaveDialog(true)} className="gap-2 text-destructive hover:text-destructive">
+                    <LogOut className="h-5 w-5" />
+                    Leave Challenge
+                  </Button>
                 </>
               )}
+              {isActive && !enrolled && (
+                <Button variant="hero" size="lg" onClick={handleEnroll} className="gap-2">
+                  <Users className="h-5 w-5" />
+                  Join Challenge
+                </Button>
+              )}
+
+              {/* Show delete button for owners (active or past) */}
               {isOwner && (
                 <Button variant="outline" size="lg" onClick={() => setShowDeleteDialog(true)} className="gap-2 text-destructive hover:text-destructive">
                   <Trash2 className="h-5 w-5" />
@@ -419,22 +446,26 @@ export default function ChallengeDetail() {
               </Link>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {mockUserContributions.map((contributor, index) => {
-                  const totalReps = Object.values(contributor.reps).reduce((s, r) => s + r, 0);
-                  return (
-                    <div key={index} className="flex items-center gap-4">
+              {topContributors.length > 0 ? (
+                <div className="space-y-4">
+                  {topContributors.map((contributor, index) => (
+                    <div key={contributor.userId} className="flex items-center gap-4">
                       <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-bold">
                         {index + 1}
                       </div>
                       <div className="flex-1">
                         <p className="font-medium">{contributor.username}</p>
-                        <p className="text-sm text-muted-foreground">{totalReps.toLocaleString()} total reps</p>
+                        <p className="text-sm text-muted-foreground">{contributor.totalReps.toLocaleString()} total reps</p>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground">
+                  <p>No contributions yet</p>
+                  <p className="text-sm mt-1">Be the first to start exercising!</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
