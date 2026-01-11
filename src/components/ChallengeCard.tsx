@@ -125,7 +125,7 @@ export function ChallengeCard({ challenge, userEnrolled, onEnroll, onLeave }: Ch
         {/* Contribution Type */}
         <div className="flex items-center gap-2 p-3 rounded-lg bg-nature-light">
           {getRewardIcon(challenge.repRewardType)}
-          <span className="text-sm font-medium text-accent-foreground">
+          <span className="text-sm font-medium text-foreground">
             {contributions} / {maxContributions} {challenge.repRewardType}
           </span>
         </div>

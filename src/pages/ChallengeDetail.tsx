@@ -413,14 +413,14 @@ export default function ChallengeDetail() {
                 <Trophy className="h-12 w-12 mx-auto text-primary mb-3" />
                 <p className="text-sm text-muted-foreground mb-1">Total Community Impact</p>
                 <div className="flex items-baseline justify-center gap-2">
-                  <p className="font-display text-5xl font-bold text-gradient">
+                  <p className="font-display text-5xl font-bold text-foreground">
                     {totalContributions}
                   </p>
                   <p className="font-display text-2xl text-muted-foreground">
                     / {maxTotalContributions}
                   </p>
                 </div>
-                <p className="text-lg text-muted-foreground mt-1">{challenge.repRewardType}</p>
+                <p className="text-lg text-foreground mt-1">{challenge.repRewardType}</p>
               </div>
               <div className="p-4 rounded-lg bg-muted/50 text-center">
                 <Target className="h-5 w-5 mx-auto text-primary mb-2" />

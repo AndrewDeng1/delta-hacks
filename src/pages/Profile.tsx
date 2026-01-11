@@ -4,14 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EXERCISE_LABELS, EXERCISE_ICONS, ExerciseType } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/hooks/use-toast';
 import { challengeAPI } from '@/lib/api';
 import { Challenge } from '@/types';
-import { User, Trophy, Zap, Loader2, Calendar } from 'lucide-react';
+import { User, Trophy, Zap, Loader2, Calendar, Palette, Check } from 'lucide-react';
 import { Navigate, Link } from 'react-router-dom';
 
 export default function Profile() {
   const { user, isAuthenticated } = useAuth();
+  const { theme, setTheme, availableThemes } = useTheme();
   const { toast } = useToast();
   const [enrolledChallenges, setEnrolledChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,6 +146,64 @@ export default function Profile() {
           </CardContent>
         </Card>
 
+        {/* Color Theme Settings */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Palette className="h-5 w-5 text-primary" />
+              Color Theme
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Choose a color theme for better visual accessibility
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {availableThemes.map((themeOption) => (
+                <button
+                  key={themeOption.id}
+                  onClick={() => {
+                    setTheme(themeOption.id);
+                    toast({
+                      title: 'Theme Updated',
+                      description: `Switched to ${themeOption.colors.name}`,
+                    });
+                  }}
+                  className={`relative p-4 rounded-lg border-2 transition-all ${
+                    theme === themeOption.id
+                      ? 'border-primary shadow-lg'
+                      : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  {/* Color preview */}
+                  <div className="flex gap-2 mb-3">
+                    <div
+                      className="h-12 w-full rounded"
+                      style={{ backgroundColor: themeOption.colors.primary }}
+                    />
+                    <div
+                      className="h-12 w-full rounded"
+                      style={{ backgroundColor: themeOption.colors.secondary }}
+                    />
+                  </div>
+
+                  {/* Theme name */}
+                  <p className="text-sm font-medium text-center">
+                    {themeOption.colors.name}
+                  </p>
+
+                  {/* Check mark for selected theme */}
+                  {theme === themeOption.id && (
+                    <div className="absolute top-2 right-2 bg-primary rounded-full p-1">
+                      <Check className="h-3 w-3 text-primary-foreground" />
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -166,7 +226,7 @@ export default function Profile() {
                       <span className="text-2xl">{EXERCISE_ICONS[exercise]}</span>
                       <span className="font-medium">{EXERCISE_LABELS[exercise]}</span>
                     </div>
-                    <span className="font-display text-2xl font-bold text-primary">
+                    <span className="font-display text-2xl font-bold text-foreground">
                       {lifetimeStats[exercise].toLocaleString()}
                     </span>
                   </div>

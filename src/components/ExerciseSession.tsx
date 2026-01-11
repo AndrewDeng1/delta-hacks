@@ -8,6 +8,7 @@ import { Camera, CameraOff, Trophy, Zap, X, Check, AlertCircle } from 'lucide-re
 import { setTargetExercise, getRepCounts, checkBackendAvailability } from '@/api/exercise';
 import { challengeAPI } from '@/lib/api';
 import { toast } from 'sonner';
+import { playRepSound, playRewardSound } from '@/utils/audio';
 
 interface ExerciseSessionProps {
   challenge: Challenge;
@@ -176,6 +177,9 @@ export function ExerciseSession({ challenge, onEnd, onClose, onChallengeUpdate }
               increments[exercise] = count;
               hasIncrements = true;
 
+              // Play rep completion sound
+              playRepSound();
+
               // Update session reps
               setSessionReps(prev => {
                 const oldValue = prev[exercise] || 0;
@@ -217,9 +221,12 @@ export function ExerciseSession({ challenge, onEnd, onClose, onChallengeUpdate }
     const currentContributions = calculateSessionContributions();
 
     if (previousContributionsRef.current > 0 && currentContributions > previousContributionsRef.current) {
-      // Contribution increased! Show pop-up animation
+      // Contribution increased! Show pop-up animation and play reward sound
       setShowRewardPop(true);
       setTimeout(() => setShowRewardPop(false), 1000);
+
+      // Play reward sound
+      playRewardSound();
     }
 
     previousContributionsRef.current = currentContributions;

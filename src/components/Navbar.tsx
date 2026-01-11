@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { TreePine, User, LogOut, Menu, X } from 'lucide-react';
+import { TreePine, User, LogOut, Menu, X, Settings } from 'lucide-react';
 import { useState } from 'react';
 
 export function Navbar() {
@@ -64,6 +64,7 @@ export function Navbar() {
                   <Button variant="ghost" size="sm" className="gap-2">
                     <User className="h-4 w-4" />
                     {user?.username}
+                    <Settings className="h-4 w-4" />
                   </Button>
                 </Link>
                 <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">

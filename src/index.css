@@ -36,6 +36,14 @@
 
     --radius: 0.75rem;
 
+    /* Theme colors - dynamically set by ThemeContext */
+    --theme-primary: #FFC20A;
+    --theme-secondary: #0C7BDC;
+
+    /* Gradient colors - use theme colors */
+    --gradient-start: var(--theme-primary);
+    --gradient-end: var(--theme-secondary);
+
     /* Custom tokens */
     --energy: 15 85% 55%;
     --energy-foreground: 0 0% 100%;
@@ -46,14 +54,14 @@
     --impact: 280 65% 55%;
     --impact-foreground: 0 0% 100%;
 
-    --gradient-hero: linear-gradient(135deg, hsl(152 55% 50%) 0%, hsl(180 55% 45%) 50%, hsl(200 75% 50%) 100%);
-    --gradient-energy: linear-gradient(135deg, hsl(35 90% 55%) 0%, hsl(15 85% 55%) 100%);
+    --gradient-hero: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
+    --gradient-energy: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
     --gradient-card: linear-gradient(180deg, hsl(160 20% 14%) 0%, hsl(160 20% 10%) 100%);
-    --gradient-nature: linear-gradient(135deg, hsl(152 55% 50%) 0%, hsl(152 50% 55%) 100%);
+    --gradient-nature: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
 
-    --shadow-soft: 0 4px 20px -4px hsl(152 55% 50% / 0.15);
+    --shadow-soft: 0 4px 20px -4px hsl(var(--primary) / 0.15);
     --shadow-card: 0 8px 30px -8px hsl(0 0% 0% / 0.3);
-    --shadow-glow: 0 0 40px hsl(152 55% 50% / 0.3);
+    --shadow-glow: 0 0 40px hsl(var(--primary) / 0.3);
 
     --font-display: 'Space Grotesk', sans-serif;
     --font-body: 'Inter', sans-serif;
@@ -122,6 +130,47 @@
 
   .font-display {
     font-family: var(--font-display);
+  }
+
+  /* Theme color utilities */
+  .text-theme-primary {
+    color: var(--theme-primary);
+  }
+
+  .text-theme-secondary {
+    color: var(--theme-secondary);
+  }
+
+  .bg-theme-primary {
+    background-color: var(--theme-primary);
+  }
+
+  .bg-theme-secondary {
+    background-color: var(--theme-secondary);
+  }
+
+  .border-theme-primary {
+    border-color: var(--theme-primary);
+  }
+
+  .border-theme-secondary {
+    border-color: var(--theme-secondary);
+  }
+
+  /* Apply theme colors to hover states */
+  .hover-theme-primary:hover {
+    background-color: hsl(var(--primary) / 0.1);
+    border-color: hsl(var(--primary));
+  }
+
+  .hover-theme-secondary:hover {
+    background-color: hsl(var(--secondary) / 0.1);
+    border-color: hsl(var(--secondary));
+  }
+
+  /* Large visual area with theme gradient overlay */
+  .hero-section {
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.05) 0%, hsl(var(--secondary) / 0.05) 100%);
   }
 
   .animate-float {
