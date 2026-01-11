@@ -33,11 +33,17 @@ export default function CreateChallenge() {
       jumping_jacks: '',
       squats: '',
       high_knees: '',
+      bicep_curls: '',
+      tricep_extensions: '',
+      lateral_raises: '',
     },
     repRewards: {
       jumping_jacks: { amount: '', perReps: '' },
       squats: { amount: '', perReps: '' },
       high_knees: { amount: '', perReps: '' },
+      bicep_curls: { amount: '', perReps: '' },
+      tricep_extensions: { amount: '', perReps: '' },
+      lateral_raises: { amount: '', perReps: '' },
     },
   });
 
@@ -347,7 +353,7 @@ export default function CreateChallenge() {
               <CardDescription>Select exercises and set goals for each</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {(['jumping_jacks', 'squats', 'high_knees'] as ExerciseType[]).map(exercise => {
+              {(['jumping_jacks', 'squats', 'high_knees', 'bicep_curls', 'tricep_extensions', 'lateral_raises'] as ExerciseType[]).map(exercise => {
                 const totalContribution = calculateTotalContribution(exercise);
                 return (
                   <div key={exercise} className="space-y-3">

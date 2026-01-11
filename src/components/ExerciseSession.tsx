@@ -23,6 +23,9 @@ export function ExerciseSession({ challenge, onEnd, onClose, onChallengeUpdate }
     jumping_jacks: 0,
     squats: 0,
     high_knees: 0,
+    bicep_curls: 0,
+    tricep_extensions: 0,
+    lateral_raises: 0,
   });
   const [popExercise, setPopExercise] = useState<ExerciseType | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<ExerciseType | null>(null);

@@ -1,4 +1,4 @@
-export type ExerciseType = 'jumping_jacks' | 'squats' | 'high_knees';
+export type ExerciseType = 'jumping_jacks' | 'squats' | 'high_knees' | 'bicep_curls' | 'tricep_extensions' | 'lateral_raises';
 
 export interface RepReward {
   amount: number;
@@ -40,10 +40,16 @@ export const EXERCISE_LABELS: Record<ExerciseType, string> = {
   jumping_jacks: 'Jumping Jacks',
   squats: 'Squats',
   high_knees: 'High Knees',
+  bicep_curls: 'Bicep Curls',
+  tricep_extensions: 'Tricep Extensions',
+  lateral_raises: 'Lateral Raises',
 };
 
 export const EXERCISE_ICONS: Record<ExerciseType, string> = {
   jumping_jacks: '⭐',
   squats: '🏋️',
   high_knees: '🏃',
+  bicep_curls: '💪',
+  tricep_extensions: '🔨',
+  lateral_raises: '🦅',
 };

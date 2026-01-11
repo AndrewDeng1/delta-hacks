@@ -71,6 +71,9 @@ class ExerciseType(Enum):
     JUMPING_JACK = "jumping_jacks"
     SQUAT = "squats"
     HIGH_KNEES = "high_knees"
+    BICEP_CURL = "bicep_curls"
+    TRICEP_EXTENSION = "tricep_extensions"
+    LATERAL_RAISE = "lateral_raises"
     NONE = "none"
 
 class JumpingJackState(Enum):
@@ -81,7 +84,16 @@ class SquatState(Enum):
     STANDING = "standing"
     SQUATTING = "squatting"
 
+class BicepCurlState(Enum):
+    DOWN = "down"
+    UP = "up"
+
+class TricepExtensionState(Enum):
+    BENT = "bent"
+    EXTENDED = "extended"
+
 # HighKneeState removed - now using boolean flags (left_knee_was_up, right_knee_was_up)
+# LateralRaiseState removed - now using boolean flags (left_arm_was_up, right_arm_was_up)
 
 # ============================================================================
 # ANGLE CALCULATION
@@ -159,10 +171,16 @@ class ExerciseDetector:
     # State machines for each exercise
     jumping_jack_state: JumpingJackState = JumpingJackState.NEUTRAL
     squat_state: SquatState = SquatState.STANDING
+    bicep_curl_state: BicepCurlState = BicepCurlState.DOWN
+    tricep_extension_state: TricepExtensionState = TricepExtensionState.BENT
 
     # Per-leg tracking for high knees (using boolean flags instead of state machine)
     left_knee_was_up: bool = False
     right_knee_was_up: bool = False
+
+    # Per-arm tracking for lateral raises (using boolean flags)
+    left_arm_was_up: bool = False
+    right_arm_was_up: bool = False
 
     # Rep counters
     rep_counts: Dict[str, int] = None
@@ -184,7 +202,10 @@ class ExerciseDetector:
             self.rep_counts = {
                 "jumping_jacks": 0,
                 "squats": 0,
-                "high_knees": 0
+                "high_knees": 0,
+                "bicep_curls": 0,
+                "tricep_extensions": 0,
+                "lateral_raises": 0
             }
         self.load_target_exercise()
 
@@ -338,6 +359,136 @@ class ExerciseDetector:
 
         return rep_completed
 
+    def detect_bicep_curl(self, landmarks) -> bool:
+        """Detect bicep curl and return True if rep completed"""
+        # Get relevant landmarks for both arms
+        left_shoulder = landmarks[PoseLandmark.LEFT_SHOULDER]
+        right_shoulder = landmarks[PoseLandmark.RIGHT_SHOULDER]
+        left_elbow = landmarks[PoseLandmark.LEFT_ELBOW]
+        right_elbow = landmarks[PoseLandmark.RIGHT_ELBOW]
+        left_wrist = landmarks[PoseLandmark.LEFT_WRIST]
+        right_wrist = landmarks[PoseLandmark.RIGHT_WRIST]
+
+        # Calculate elbow angles (shoulder-elbow-wrist)
+        left_elbow_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
+        right_elbow_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
+
+        # Average both arms
+        avg_elbow_angle = (left_elbow_angle + right_elbow_angle) / 2
+
+        # In curl UP position, elbow angle is small (< 60 degrees)
+        # In curl DOWN position, elbow angle is large (> 140 degrees)
+        is_curled_up = avg_elbow_angle < 60
+        is_curled_down = avg_elbow_angle > 140
+
+        rep_completed = False
+
+        if self.bicep_curl_state == BicepCurlState.DOWN and is_curled_up:
+            self.bicep_curl_state = BicepCurlState.UP
+            print(f"[BICEP CURL DEBUG] Elbow angle: {avg_elbow_angle:.1f}° → Curling UP")
+        elif self.bicep_curl_state == BicepCurlState.UP and is_curled_down:
+            self.bicep_curl_state = BicepCurlState.DOWN
+            rep_completed = True
+            print(f"[BICEP CURL DEBUG] Elbow angle: {avg_elbow_angle:.1f}° → Lowering DOWN - REP COMPLETE!")
+
+        return rep_completed
+
+    def detect_tricep_extension(self, landmarks) -> bool:
+        """Detect overhead tricep extension and return True if rep completed
+        Requirements:
+        - Elbows must be elevated above shoulders (overhead position)
+        - Elbow angle changes from bent (~90°) to extended (~140°+)
+        """
+        # Get relevant landmarks for both arms
+        left_shoulder = landmarks[PoseLandmark.LEFT_SHOULDER]
+        right_shoulder = landmarks[PoseLandmark.RIGHT_SHOULDER]
+        left_elbow = landmarks[PoseLandmark.LEFT_ELBOW]
+        right_elbow = landmarks[PoseLandmark.RIGHT_ELBOW]
+        left_wrist = landmarks[PoseLandmark.LEFT_WRIST]
+        right_wrist = landmarks[PoseLandmark.RIGHT_WRIST]
+
+        # IMPORTANT: Check that elbows are elevated above shoulders (overhead position)
+        # In image coordinates, y increases downward, so elevated means SMALLER y value
+        left_elbows_elevated = left_elbow.y < left_shoulder.y
+        right_elbows_elevated = right_elbow.y < right_shoulder.y
+
+        # Both elbows must be elevated for this to be an overhead tricep extension
+        if not (left_elbows_elevated and right_elbows_elevated):
+            # Not in overhead position - don't count as tricep extension
+            return False
+
+        # Calculate elbow angles (shoulder-elbow-wrist)
+        left_elbow_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
+        right_elbow_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
+
+        # Average both arms
+        avg_elbow_angle = (left_elbow_angle + right_elbow_angle) / 2
+
+        # In EXTENDED position, elbow angle is large (> 140 degrees - arm straight up)
+        # In BENT position, elbow angle is small (< 90 degrees - hand behind head)
+        is_extended = avg_elbow_angle > 140
+        is_bent = avg_elbow_angle < 90
+
+        rep_completed = False
+
+        if self.tricep_extension_state == TricepExtensionState.BENT and is_extended:
+            self.tricep_extension_state = TricepExtensionState.EXTENDED
+            rep_completed = True
+            print(f"[TRICEP EXTENSION DEBUG] Elbow angle: {avg_elbow_angle:.1f}° (overhead) → Extending UP - REP COMPLETE!")
+        elif self.tricep_extension_state == TricepExtensionState.EXTENDED and is_bent:
+            self.tricep_extension_state = TricepExtensionState.BENT
+            print(f"[TRICEP EXTENSION DEBUG] Elbow angle: {avg_elbow_angle:.1f}° (overhead) → Lowering DOWN")
+
+        return rep_completed
+
+    def detect_lateral_raise(self, landmarks) -> bool:
+        """Detect lateral arm raise (one arm at a time) using angle-based detection with hysteresis"""
+        # Get relevant landmarks
+        left_shoulder = landmarks[PoseLandmark.LEFT_SHOULDER]
+        right_shoulder = landmarks[PoseLandmark.RIGHT_SHOULDER]
+        left_elbow = landmarks[PoseLandmark.LEFT_ELBOW]
+        right_elbow = landmarks[PoseLandmark.RIGHT_ELBOW]
+        left_hip = landmarks[PoseLandmark.LEFT_HIP]
+        right_hip = landmarks[PoseLandmark.RIGHT_HIP]
+
+        # Calculate angles between hip-shoulder-elbow for each arm
+        left_angle = calculate_angle(left_hip, left_shoulder, left_elbow)
+        right_angle = calculate_angle(right_hip, right_shoulder, right_elbow)
+
+        # HYSTERESIS THRESHOLDS
+        # Large angle = arm at side (down)
+        # Small angle = arm raised to horizontal (up)
+        UP_THRESHOLD = 100      # Angle must be LESS than this when arm is raised
+        DOWN_THRESHOLD = 150    # Angle must be MORE than this when arm is down
+
+        rep_completed = False
+
+        # LEFT ARM: Check for complete cycle (arm up → arm down)
+        if left_angle < UP_THRESHOLD and not self.left_arm_was_up:
+            # Arm is raised UP
+            self.left_arm_was_up = True
+            print(f"[LATERAL RAISE] Left arm UP: angle={left_angle:.1f}°")
+
+        elif left_angle > DOWN_THRESHOLD and self.left_arm_was_up:
+            # Arm is DOWN - CYCLE COMPLETE
+            self.left_arm_was_up = False
+            rep_completed = True
+            print(f"[LATERAL RAISE] Left arm DOWN: angle={left_angle:.1f}° → REP!")
+
+        # RIGHT ARM: Check for complete cycle (arm up → arm down)
+        if right_angle < UP_THRESHOLD and not self.right_arm_was_up:
+            # Arm is raised UP
+            self.right_arm_was_up = True
+            print(f"[LATERAL RAISE] Right arm UP: angle={right_angle:.1f}°")
+
+        elif right_angle > DOWN_THRESHOLD and self.right_arm_was_up:
+            # Arm is DOWN - CYCLE COMPLETE
+            self.right_arm_was_up = False
+            rep_completed = True
+            print(f"[LATERAL RAISE] Right arm DOWN: angle={right_angle:.1f}° → REP!")
+
+        return rep_completed
+
     def process_frame(self, landmarks):
         """Process a frame and detect exercise + reps (only for target exercise)"""
         if self.cooldown_frames > 0:
@@ -353,8 +504,12 @@ class ExerciseDetector:
                 # Reset states when target changes
                 self.jumping_jack_state = JumpingJackState.NEUTRAL
                 self.squat_state = SquatState.STANDING
+                self.bicep_curl_state = BicepCurlState.DOWN
+                self.tricep_extension_state = TricepExtensionState.BENT
                 self.left_knee_was_up = False
                 self.right_knee_was_up = False
+                self.left_arm_was_up = False
+                self.right_arm_was_up = False
                 print(f"[TARGET] Switched to: {self.target_exercise.value}")
             self.reload_counter = 0
 
@@ -378,6 +533,21 @@ class ExerciseDetector:
                 PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP,
                 PoseLandmark.LEFT_KNEE, PoseLandmark.RIGHT_KNEE,
                 PoseLandmark.LEFT_ANKLE, PoseLandmark.RIGHT_ANKLE
+            ],
+            ExerciseType.BICEP_CURL: [
+                PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
+                PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
+                PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST
+            ],
+            ExerciseType.TRICEP_EXTENSION: [
+                PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
+                PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
+                PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST
+            ],
+            ExerciseType.LATERAL_RAISE: [
+                PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
+                PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
+                PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP
             ]
         }
 
@@ -402,6 +572,12 @@ class ExerciseDetector:
             rep_completed = self.detect_squat(landmarks)
         elif self.target_exercise == ExerciseType.HIGH_KNEES:
             rep_completed = self.detect_high_knees(landmarks)
+        elif self.target_exercise == ExerciseType.BICEP_CURL:
+            rep_completed = self.detect_bicep_curl(landmarks)
+        elif self.target_exercise == ExerciseType.TRICEP_EXTENSION:
+            rep_completed = self.detect_tricep_extension(landmarks)
+        elif self.target_exercise == ExerciseType.LATERAL_RAISE:
+            rep_completed = self.detect_lateral_raise(landmarks)
 
         # Increment counter if rep completed
         if rep_completed:
@@ -409,8 +585,8 @@ class ExerciseDetector:
             self.load_counts()
             self.rep_counts[self.target_exercise.value] += 1
 
-            # Use shorter cooldown for high knees (rapid alternating movement)
-            if self.target_exercise == ExerciseType.HIGH_KNEES:
+            # Use shorter cooldown for rapid alternating movements
+            if self.target_exercise in [ExerciseType.HIGH_KNEES, ExerciseType.LATERAL_RAISE]:
                 self.cooldown_frames = 3  # ~100ms at 30fps
             else:
                 self.cooldown_frames = self.COOLDOWN_DURATION  # 10 frames for others
@@ -456,6 +632,12 @@ class ExerciseDetector:
                         self.target_exercise = ExerciseType.SQUAT
                     elif target == "high_knees":
                         self.target_exercise = ExerciseType.HIGH_KNEES
+                    elif target == "bicep_curls":
+                        self.target_exercise = ExerciseType.BICEP_CURL
+                    elif target == "tricep_extensions":
+                        self.target_exercise = ExerciseType.TRICEP_EXTENSION
+                    elif target == "lateral_raises":
+                        self.target_exercise = ExerciseType.LATERAL_RAISE
                     else:
                         self.target_exercise = ExerciseType.SQUAT
                     print(f"[TARGET] Loaded target exercise: {self.target_exercise.value}")
@@ -554,6 +736,9 @@ def main():
     print("  • Jumping Jacks")
     print("  • Squats")
     print("  • High Knees")
+    print("  • Bicep Curls")
+    print("  • Tricep Extensions (Overhead)")
+    print("  • Lateral Arm Raises")
     print("\nPress 'q' in the video window to quit")
     print("="*60 + "\n")
 
@@ -619,7 +804,7 @@ def main():
 
                 # Draw semi-transparent background for text
                 overlay = frame.copy()
-                cv2.rectangle(overlay, (0, 0), (400, 150), (0, 0, 0), -1)
+                cv2.rectangle(overlay, (0, 0), (400, 240), (0, 0, 0), -1)
                 cv2.addWeighted(overlay, 0.4, frame, 0.6, 0, frame)
 
                 # Display status - POSE DETECTED
@@ -630,11 +815,17 @@ def main():
                 cv2.putText(frame, f"Target: {detector.target_exercise.value}",
                            (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
                 cv2.putText(frame, f"Jumping Jacks: {detector.rep_counts['jumping_jacks']}",
-                           (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                           (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                 cv2.putText(frame, f"Squats: {detector.rep_counts['squats']}",
-                           (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                           (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                 cv2.putText(frame, f"High Knees: {detector.rep_counts['high_knees']}",
-                           (10, 135), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                           (10, 135), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                cv2.putText(frame, f"Bicep Curls: {detector.rep_counts['bicep_curls']}",
+                           (10, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                cv2.putText(frame, f"Tricep Ext: {detector.rep_counts['tricep_extensions']}",
+                           (10, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                cv2.putText(frame, f"Lateral Raise: {detector.rep_counts['lateral_raises']}",
+                           (10, 210), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
                 # Debug info for squats
                 if detector.target_exercise == ExerciseType.SQUAT:
@@ -750,6 +941,9 @@ def main():
     print(f"Jumping Jacks: {detector.rep_counts['jumping_jacks']}")
     print(f"Squats: {detector.rep_counts['squats']}")
     print(f"High Knees: {detector.rep_counts['high_knees']}")
+    print(f"Bicep Curls: {detector.rep_counts['bicep_curls']}")
+    print(f"Tricep Extensions: {detector.rep_counts['tricep_extensions']}")
+    print(f"Lateral Raises: {detector.rep_counts['lateral_raises']}")
 
 if __name__ == "__main__":
     main()

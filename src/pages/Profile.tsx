@@ -19,6 +19,9 @@ export default function Profile() {
     jumping_jacks: 0,
     squats: 0,
     high_knees: 0,
+    bicep_curls: 0,
+    tricep_extensions: 0,
+    lateral_raises: 0,
   });
 
   useEffect(() => {
@@ -72,6 +75,9 @@ export default function Profile() {
           jumping_jacks: 0,
           squats: 0,
           high_knees: 0,
+          bicep_curls: 0,
+          tricep_extensions: 0,
+          lateral_raises: 0,
         };
 
         transformedChallenges.forEach((challenge) => {
@@ -154,7 +160,7 @@ export default function Profile() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {(['jumping_jacks', 'squats', 'high_knees'] as ExerciseType[]).map(exercise => (
+                {(['jumping_jacks', 'squats', 'high_knees', 'bicep_curls', 'tricep_extensions', 'lateral_raises'] as ExerciseType[]).map(exercise => (
                   <div key={exercise} className="flex items-center justify-between p-4 rounded-lg bg-muted">
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">{EXERCISE_ICONS[exercise]}</span>

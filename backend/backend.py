@@ -624,7 +624,14 @@ def process_reps():
 
     except FileNotFoundError:
         # Initialize file if it doesn't exist
-        default_counts = {"jumping_jacks": 0, "squats": 0, "high_knees": 0}
+        default_counts = {
+            "jumping_jacks": 0,
+            "squats": 0,
+            "high_knees": 0,
+            "bicep_curls": 0,
+            "tricep_extensions": 0,
+            "lateral_raises": 0
+        }
         with open(rep_file_path, 'w') as f:
             json.dump(default_counts, f, indent=2)
         return jsonify(default_counts)
@@ -635,7 +642,7 @@ def process_reps():
 def set_target_exercise():
     """
     Set the target exercise for the motion detection script
-    Request body: { "target": "squats" | "jumping_jacks" | "high_knees" }
+    Request body: { "target": "squats" | "jumping_jacks" | "high_knees" | "bicep_curls" | "tricep_extensions" | "lateral_raises" }
     No authentication required
     """
     try:
@@ -646,7 +653,7 @@ def set_target_exercise():
         target = data['target']
 
         # Validate target exercise
-        valid_exercises = ["squats", "jumping_jacks", "high_knees"]
+        valid_exercises = ["squats", "jumping_jacks", "high_knees", "bicep_curls", "tricep_extensions", "lateral_raises"]
         if target not in valid_exercises:
             return jsonify({'error': f'Invalid target. Must be one of: {", ".join(valid_exercises)}'}), 400
 
