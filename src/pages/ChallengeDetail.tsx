@@ -313,10 +313,11 @@ export default function ChallengeDetail() {
 
   if (showSession) {
     return (
-      <ExerciseSession 
+      <ExerciseSession
         challenge={challenge}
         onEnd={handleSessionEnd}
         onClose={() => setShowSession(false)}
+        onChallengeUpdate={(updatedChallenge) => setChallenge(updatedChallenge)}
       />
     );
   }

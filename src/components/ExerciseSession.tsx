@@ -6,15 +6,17 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Camera, CameraOff, Trophy, Zap, X, Check, AlertCircle } from 'lucide-react';
 import { setTargetExercise, getRepCounts, checkBackendAvailability } from '@/api/exercise';
+import { challengeAPI } from '@/lib/api';
 import { toast } from 'sonner';
 
 interface ExerciseSessionProps {
   challenge: Challenge;
   onEnd: (stats: SessionStats) => void;
   onClose: () => void;
+  onChallengeUpdate?: (updatedChallenge: Challenge) => void;
 }
 
-export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionProps) {
+export function ExerciseSession({ challenge, onEnd, onClose, onChallengeUpdate }: ExerciseSessionProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [sessionReps, setSessionReps] = useState<Record<ExerciseType, number>>({
@@ -146,7 +148,7 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
     return () => clearInterval(interval);
   }, [challenge.enabledExercises]);
 
-  // Poll backend for real rep counts
+  // Poll backend for real rep counts and send to MongoDB
   useEffect(() => {
     if (!cameraActive || !selectedExercise) return;
 
@@ -155,12 +157,20 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
         const repCounts = await getRepCounts();
         console.log('[Polling] Received rep counts:', repCounts);
 
+        // Build increments object for MongoDB
+        const increments: Record<string, number> = {};
+        let hasIncrements = false;
+
         // Process increments for all exercises
         Object.entries(repCounts).forEach(([exercise, count]) => {
           if (count > 0) {
             console.log(`[Polling] ${exercise}: received count = ${count}`);
 
             if (challenge.enabledExercises.includes(exercise as ExerciseType)) {
+              // Add to increments for MongoDB
+              increments[exercise] = count;
+              hasIncrements = true;
+
               // Update session reps
               setSessionReps(prev => {
                 const oldValue = prev[exercise] || 0;
@@ -178,25 +188,83 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
             }
           }
         });
+
+        // Send increments to MongoDB if we have any
+        if (hasIncrements) {
+          try {
+            await challengeAPI.incrementContributions(challenge.id, increments);
+            console.log('[MongoDB] Successfully saved increments:', increments);
+          } catch (error) {
+            console.error('[MongoDB] Failed to save increments:', error);
+            toast.error('Failed to save reps to challenge');
+          }
+        }
       } catch (error) {
         console.error('Failed to fetch rep counts:', error);
       }
     }, 500); // Poll every 500ms
 
     return () => clearInterval(pollInterval);
-  }, [cameraActive, selectedExercise, challenge.enabledExercises]);
+  }, [cameraActive, selectedExercise, challenge.enabledExercises, challenge.id]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => stopCamera();
   }, []);
 
-  const handleEndSession = () => {
+  const fetchLatestChallenge = async () => {
+    try {
+      const apiChallenge = await challengeAPI.getChallenge(challenge.id);
+
+      // Handle repReward transformation
+      const repReward: any = {};
+      Object.entries(apiChallenge.repReward).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          repReward[key] = { amount: value[0], perReps: value[1] };
+        } else {
+          repReward[key] = { amount: value as number, perReps: 1 };
+        }
+      });
+
+      const transformed: Challenge = {
+        id: apiChallenge._id,
+        name: apiChallenge.name,
+        creatorId: apiChallenge.creatorUserId,
+        creatorName: 'User',
+        description: apiChallenge.description,
+        enabledExercises: apiChallenge.enabledExercises as any,
+        userContributions: apiChallenge.contributions,
+        enrolledUsers: apiChallenge.participants,
+        repGoal: apiChallenge.repGoal as any,
+        repReward: repReward,
+        repRewardType: Object.values(apiChallenge.repRewardType)[0] || 'trees planted',
+        completionReward: apiChallenge.completionReward,
+        startDate: new Date(apiChallenge.startDate),
+        endDate: new Date(apiChallenge.endDate),
+        isCompleted: apiChallenge.completed,
+      };
+
+      if (onChallengeUpdate) {
+        onChallengeUpdate(transformed);
+      }
+    } catch (error) {
+      console.error('[Session Exit] Failed to fetch latest challenge data:', error);
+    }
+  };
+
+  const handleEndSession = async () => {
     stopCamera();
+    await fetchLatestChallenge();
     onEnd({
       reps: sessionReps,
       rewardsEarned: calculateSessionContributions(),
     });
+  };
+
+  const handleClose = async () => {
+    stopCamera();
+    await fetchLatestChallenge();
+    onClose();
   };
 
   const sessionContributions = calculateSessionContributions();
@@ -211,7 +279,7 @@ export function ExerciseSession({ challenge, onEnd, onClose }: ExerciseSessionPr
             <h1 className="font-display text-2xl font-bold">{challenge.name}</h1>
             <p className="text-muted-foreground">Exercise Session</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose}>
+          <Button variant="ghost" size="icon" onClick={handleClose}>
             <X className="h-6 w-6" />
           </Button>
         </div>
