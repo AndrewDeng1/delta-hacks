@@ -442,50 +442,58 @@ class ExerciseDetector:
         return rep_completed
 
     def detect_lateral_raise(self, landmarks) -> bool:
-        """Detect lateral arm raise (one arm at a time) using angle-based detection with hysteresis"""
+        """Detect lateral arm raise (one arm at a time) using wrist-shoulder-hip angle
+        Requirements:
+        - Must see shoulders, wrists, and hips
+        - Sufficient range of motion (50+ degrees between up and down positions)
+        - Each arm tracked independently
+        """
         # Get relevant landmarks
         left_shoulder = landmarks[PoseLandmark.LEFT_SHOULDER]
         right_shoulder = landmarks[PoseLandmark.RIGHT_SHOULDER]
-        left_elbow = landmarks[PoseLandmark.LEFT_ELBOW]
-        right_elbow = landmarks[PoseLandmark.RIGHT_ELBOW]
+        left_wrist = landmarks[PoseLandmark.LEFT_WRIST]
+        right_wrist = landmarks[PoseLandmark.RIGHT_WRIST]
         left_hip = landmarks[PoseLandmark.LEFT_HIP]
         right_hip = landmarks[PoseLandmark.RIGHT_HIP]
 
-        # Calculate angles between hip-shoulder-elbow for each arm
-        left_angle = calculate_angle(left_hip, left_shoulder, left_elbow)
-        right_angle = calculate_angle(right_hip, right_shoulder, right_elbow)
+        # Calculate angles between hip-shoulder-wrist for each arm
+        left_angle = calculate_angle(left_hip, left_shoulder, left_wrist)
+        right_angle = calculate_angle(right_hip, right_shoulder, right_wrist)
 
-        # HYSTERESIS THRESHOLDS
-        # Large angle = arm at side (down)
-        # Small angle = arm raised to horizontal (up)
-        UP_THRESHOLD = 100      # Angle must be LESS than this when arm is raised
-        DOWN_THRESHOLD = 150    # Angle must be MORE than this when arm is down
+        # HYSTERESIS THRESHOLDS with proper range of motion
+        # When arm is DOWN at side: angle ~170-180° (nearly straight line from hip to wrist)
+        # When arm is RAISED to horizontal: angle ~90-100° (wrist perpendicular to body)
+        # Ensure at least 50° range of motion between thresholds
+        UP_THRESHOLD = 110      # Angle must be LESS than this when arm is raised horizontal
+        DOWN_THRESHOLD = 160    # Angle must be MORE than this when arm is down at side
+
+        # Range of motion check: 160 - 110 = 50° minimum
 
         rep_completed = False
 
         # LEFT ARM: Check for complete cycle (arm up → arm down)
         if left_angle < UP_THRESHOLD and not self.left_arm_was_up:
-            # Arm is raised UP
+            # Arm is raised UP to horizontal
             self.left_arm_was_up = True
-            print(f"[LATERAL RAISE] Left arm UP: angle={left_angle:.1f}°")
+            print(f"[LATERAL RAISE] Left arm UP: hip-shoulder-wrist angle={left_angle:.1f}°")
 
         elif left_angle > DOWN_THRESHOLD and self.left_arm_was_up:
-            # Arm is DOWN - CYCLE COMPLETE
+            # Arm is DOWN at side - CYCLE COMPLETE
             self.left_arm_was_up = False
             rep_completed = True
-            print(f"[LATERAL RAISE] Left arm DOWN: angle={left_angle:.1f}° → REP!")
+            print(f"[LATERAL RAISE] Left arm DOWN: hip-shoulder-wrist angle={left_angle:.1f}° → REP!")
 
         # RIGHT ARM: Check for complete cycle (arm up → arm down)
         if right_angle < UP_THRESHOLD and not self.right_arm_was_up:
-            # Arm is raised UP
+            # Arm is raised UP to horizontal
             self.right_arm_was_up = True
-            print(f"[LATERAL RAISE] Right arm UP: angle={right_angle:.1f}°")
+            print(f"[LATERAL RAISE] Right arm UP: hip-shoulder-wrist angle={right_angle:.1f}°")
 
         elif right_angle > DOWN_THRESHOLD and self.right_arm_was_up:
-            # Arm is DOWN - CYCLE COMPLETE
+            # Arm is DOWN at side - CYCLE COMPLETE
             self.right_arm_was_up = False
             rep_completed = True
-            print(f"[LATERAL RAISE] Right arm DOWN: angle={right_angle:.1f}° → REP!")
+            print(f"[LATERAL RAISE] Right arm DOWN: hip-shoulder-wrist angle={right_angle:.1f}° → REP!")
 
         return rep_completed
 
@@ -546,7 +554,7 @@ class ExerciseDetector:
             ],
             ExerciseType.LATERAL_RAISE: [
                 PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
-                PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
+                PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST,
                 PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP
             ]
         }
