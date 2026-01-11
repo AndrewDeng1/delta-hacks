@@ -1,0 +1,345 @@
+import { useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { Navbar } from '@/components/Navbar';
+import { ExerciseSession } from '@/components/ExerciseSession';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { mockChallenges } from '@/data/mockChallenges';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { 
+  EXERCISE_LABELS, 
+  EXERCISE_ICONS, 
+  ExerciseType,
+  SessionStats 
+} from '@/types';
+import { 
+  ArrowLeft, 
+  Calendar, 
+  Users, 
+  Trophy, 
+  Play, 
+  TreePine,
+  Target,
+  Trash2,
+  LogOut,
+  ExternalLink
+} from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+
+export default function ChallengeDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user, updateUserStats } = useAuth();
+  const { toast } = useToast();
+  const [showSession, setShowSession] = useState(false);
+  const [enrolled, setEnrolled] = useState(false);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  const challenge = mockChallenges.find(c => c.id === id);
+
+  if (!challenge) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="container mx-auto px-4 py-12 text-center">
+          <h1 className="text-2xl font-bold mb-4">Challenge not found</h1>
+          <Link to="/challenges">
+            <Button>Back to Challenges</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const now = new Date();
+  const isActive = now >= challenge.startDate && now <= challenge.endDate && !challenge.isCompleted;
+  const daysLeft = Math.ceil((challenge.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  // Check if user owns this challenge (mock check)
+  const isOwner = user?.id === challenge.creatorId;
+
+  // Calculate total reps per exercise
+  const getTotalReps = (exercise: ExerciseType) => {
+    return Object.values(challenge.userContributions).reduce(
+      (sum, userReps) => sum + (userReps[exercise] || 0), 0
+    );
+  };
+
+  // Calculate contributions
+  const getContributions = (exercise: ExerciseType) => {
+    const totalReps = getTotalReps(exercise);
+    const reward = challenge.repReward[exercise];
+    if (reward && reward.perReps > 0) {
+      return Math.floor(totalReps / reward.perReps) * reward.amount;
+    }
+    return 0;
+  };
+
+  const totalContributions = challenge.enabledExercises.reduce(
+    (sum, ex) => sum + getContributions(ex), 0
+  );
+
+  // User contributions (mock data)
+  const mockUserContributions = [
+    { username: 'FitnessFan', reps: { jumping_jacks: 500, squats: 300, high_knees: 200 } },
+    { username: 'EcoRunner', reps: { jumping_jacks: 320, squats: 180, high_knees: 450 } },
+    { username: 'GreenWarrior', reps: { jumping_jacks: 280, squats: 220, high_knees: 150 } },
+  ];
+
+  const handleEnroll = () => {
+    setEnrolled(true);
+    toast({
+      title: 'Enrolled!',
+      description: `You've joined "${challenge.name}"`,
+    });
+  };
+
+  const handleLeaveChallenge = () => {
+    setEnrolled(false);
+    setShowLeaveDialog(false);
+    toast({
+      title: 'Left Challenge',
+      description: 'Your contributions have been removed.',
+    });
+  };
+
+  const handleDeleteChallenge = () => {
+    setShowDeleteDialog(false);
+    toast({
+      title: 'Challenge Deleted',
+      description: 'The challenge has been permanently deleted.',
+    });
+    navigate('/my-challenges');
+  };
+
+  const handleSessionEnd = (stats: SessionStats) => {
+    setShowSession(false);
+    
+    // Update user stats
+    for (const exercise of challenge.enabledExercises) {
+      if (stats.reps[exercise] > 0) {
+        updateUserStats(exercise, stats.reps[exercise]);
+      }
+    }
+
+    toast({
+      title: 'Session Complete! 🎉',
+      description: `You contributed ${stats.rewardsEarned} ${challenge.repRewardType} this session!`,
+    });
+  };
+
+  if (showSession) {
+    return (
+      <ExerciseSession 
+        challenge={challenge}
+        onEnd={handleSessionEnd}
+        onClose={() => setShowSession(false)}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      
+      <main className="container mx-auto px-4 py-8">
+        {/* Back Button */}
+        <Link to="/challenges" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6">
+          <ArrowLeft className="h-4 w-4" />
+          Back to Challenges
+        </Link>
+
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row gap-8 mb-8">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-4">
+              {isActive && <Badge className="bg-primary text-primary-foreground">Active</Badge>}
+              {!isActive && challenge.isCompleted && <Badge variant="secondary">Completed</Badge>}
+              {isOwner && <Badge variant="outline">Your Challenge</Badge>}
+            </div>
+            <h1 className="font-display text-4xl font-bold mb-4">{challenge.name}</h1>
+            <p className="text-lg text-muted-foreground mb-6">{challenge.description}</p>
+            
+            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-6">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                {challenge.enrolledUsers.length} enrolled
+              </div>
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                {isActive ? `${daysLeft} days left` : 'Ended'}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">by</span>
+                <span className="font-medium text-foreground">{challenge.creatorName}</span>
+              </div>
+            </div>
+
+            {/* Enabled Exercises */}
+            <div className="flex flex-wrap gap-2 mb-6">
+              {challenge.enabledExercises.map((exercise) => (
+                <Badge key={exercise} variant="outline" className="gap-1">
+                  <span>{EXERCISE_ICONS[exercise]}</span>
+                  {EXERCISE_LABELS[exercise]}
+                </Badge>
+              ))}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap gap-3">
+              {isActive && (
+                <>
+                  {enrolled ? (
+                    <>
+                      <Button variant="hero" size="lg" onClick={() => setShowSession(true)} className="gap-2">
+                        <Play className="h-5 w-5" />
+                        Start Exercising
+                      </Button>
+                      <Button variant="outline" size="lg" onClick={() => setShowLeaveDialog(true)} className="gap-2 text-destructive hover:text-destructive">
+                        <LogOut className="h-5 w-5" />
+                        Leave Challenge
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="hero" size="lg" onClick={handleEnroll} className="gap-2">
+                      <Users className="h-5 w-5" />
+                      Join Challenge
+                    </Button>
+                  )}
+                </>
+              )}
+              {isOwner && (
+                <Button variant="outline" size="lg" onClick={() => setShowDeleteDialog(true)} className="gap-2 text-destructive hover:text-destructive">
+                  <Trash2 className="h-5 w-5" />
+                  Delete Challenge
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Impact Card */}
+          <Card className="lg:w-80 gradient-card border-primary/20">
+            <CardContent className="pt-6">
+              <div className="text-center mb-6">
+                <Trophy className="h-12 w-12 mx-auto text-primary mb-3" />
+                <p className="text-sm text-muted-foreground mb-1">Total Community Impact</p>
+                <p className="font-display text-5xl font-bold text-gradient">
+                  {totalContributions}
+                </p>
+                <p className="text-lg text-muted-foreground">{challenge.repRewardType}</p>
+              </div>
+              <div className="p-4 rounded-lg bg-muted/50 text-center">
+                <Target className="h-5 w-5 mx-auto text-primary mb-2" />
+                <p className="text-sm text-muted-foreground">Completion Goal</p>
+                <p className="font-medium text-sm mt-1">{challenge.completionReward}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Progress Section */}
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
+          {/* Exercise Progress */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TreePine className="h-5 w-5 text-primary" />
+                Exercise Progress
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {challenge.enabledExercises.map((exercise) => {
+                const total = getTotalReps(exercise);
+                const goal = challenge.repGoal[exercise];
+                const progress = goal > 0 ? Math.min((total / goal) * 100, 100) : 0;
+                const reward = challenge.repReward[exercise];
+                const contributions = getContributions(exercise);
+
+                return (
+                  <div key={exercise}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{EXERCISE_ICONS[exercise]}</span>
+                        <span className="font-medium">{EXERCISE_LABELS[exercise]}</span>
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        {total.toLocaleString()} / {goal.toLocaleString()}
+                      </span>
+                    </div>
+                    <Progress value={progress} className="h-3 mb-2" />
+                    {reward && (
+                      <p className="text-sm text-primary">
+                        {reward.amount} {challenge.repRewardType} per {reward.perReps} reps
+                        <span className="text-muted-foreground"> • {contributions} contributed</span>
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* Top Contributors */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                Top Contributors
+              </CardTitle>
+              <Link to={`/challenges/${id}/contributors`}>
+                <Button variant="ghost" size="sm" className="gap-1">
+                  View All
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {mockUserContributions.map((contributor, index) => {
+                  const totalReps = Object.values(contributor.reps).reduce((s, r) => s + r, 0);
+                  return (
+                    <div key={index} className="flex items-center gap-4">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-bold">
+                        {index + 1}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium">{contributor.username}</p>
+                        <p className="text-sm text-muted-foreground">{totalReps.toLocaleString()} total reps</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+
+      {/* Leave Challenge Confirmation */}
+      <ConfirmDialog
+        open={showLeaveDialog}
+        onOpenChange={setShowLeaveDialog}
+        title="Leave Challenge?"
+        description="This will remove all your contributions to this challenge. This action cannot be undone."
+        confirmLabel="Leave Challenge"
+        variant="destructive"
+        onConfirm={handleLeaveChallenge}
+      />
+
+      {/* Delete Challenge Confirmation */}
+      <ConfirmDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title="Delete Challenge?"
+        description="This will permanently delete the challenge and all participant contributions. This action cannot be undone."
+        confirmLabel="Delete Challenge"
+        variant="destructive"
+        onConfirm={handleDeleteChallenge}
+      />
+    </div>
+  );
+}
