@@ -278,7 +278,7 @@ export const repsAPI = {
 // ============================================================================
 
 export const coachAPI = {
-  async sendMessage(message: string): Promise<{ response: string; context_used: boolean }> {
+  async sendMessage(message: string): Promise<{ response: string; context_used: boolean; audio?: string }> {
     const response = await authenticatedFetch(`/coach/chat`, {
       method: 'POST',
       body: JSON.stringify({ message }),

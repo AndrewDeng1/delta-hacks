@@ -29,6 +29,17 @@ What's up?`,
   timestamp: new Date(),
 };
 
+// Helper function to convert base64 to Blob for audio playback
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const byteCharacters = atob(base64);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  return new Blob([byteArray], { type: mimeType });
+}
+
 export default function Consultant() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
@@ -105,6 +116,21 @@ export default function Consultant() {
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, assistantMessage]);
+
+      // Play audio if available
+      if (response.audio) {
+        try {
+          const audioBlob = base64ToBlob(response.audio, 'audio/mpeg');
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          audio.play();
+
+          // Clean up after playing
+          audio.onended = () => URL.revokeObjectURL(audioUrl);
+        } catch (error) {
+          console.error('Failed to play audio:', error);
+        }
+      }
 
       if (response.context_used) {
         toast({

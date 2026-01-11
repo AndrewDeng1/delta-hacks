@@ -105,7 +105,7 @@ CORS(app)
 from cerebras.cloud.sdk import Cerebras
 
 cerebras_client = Cerebras(
-    api_key=os.getenv("CEREBRAS_API_KEY", "csk-tkpt6mncyv3dhe8fhy3cr5c64ddwd233f5fyrt4t63rjvkp8")
+    api_key=os.getenv("CEREBRAS_API_KEY")
 )
 
 # Moorcheh client for RAG
@@ -121,6 +121,33 @@ if MOORCHEH_API_KEY:
         print(f"✗ Moorcheh initialization failed: {e}")
 else:
     print("⚠ MOORCHEH_API_KEY not set - RAG features will be disabled")
+
+# ElevenLabs client for TTS
+from elevenlabs import ElevenLabs
+
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+elevenlabs_client = None
+if ELEVENLABS_API_KEY:
+    try:
+        elevenlabs_client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+        print("✓ ElevenLabs client initialized")
+    except Exception as e:
+        print(f"✗ ElevenLabs initialization failed: {e}")
+else:
+    print("⚠ ELEVENLABS_API_KEY not set - TTS features will be disabled")
+
+# Helper function to clean reasoning tags from AI responses
+def clean_reasoning_tags(text):
+    """Remove <think>...</think> tags from AI responses"""
+    if not text:
+        return text
+
+    import re
+    # Remove <think>...</think> blocks (including multiline)
+    cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    # Clean up extra whitespace
+    cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)
+    return cleaned.strip()
 
 # System prompt for the coach
 COACH_SYSTEM_PROMPT = """You're texting the user as their gym coach. Text like a real person - casual, encouraging, short messages.
@@ -381,13 +408,15 @@ def get_ai_response(user_message, chat_history, rag_context, user_id, coach_sett
 
         # First call to check if LLM needs tools
         response = cerebras_client.chat.completions.create(
-            model="zai-glm-4.6",
+            model="qwen-3-32b",
             messages=messages,
             temperature=0.8,
             max_tokens=300
         )
 
         ai_content = response.choices[0].message.content
+        # Clean reasoning tags from response
+        ai_content = clean_reasoning_tags(ai_content)
         print(f"[AI Response] Length: {len(ai_content) if ai_content else 0}, Content: {ai_content[:200] if ai_content else 'EMPTY'}")
 
         # If content is empty or None, retry
@@ -429,13 +458,15 @@ def get_ai_response(user_message, chat_history, rag_context, user_id, coach_sett
                 })
 
                 response = cerebras_client.chat.completions.create(
-                    model="zai-glm-4.6",
+                    model="qwen-3-32b",
                     messages=messages,
                     temperature=0.8,
                     max_tokens=300
                 )
 
                 ai_content = response.choices[0].message.content
+                # Clean reasoning tags from response
+                ai_content = clean_reasoning_tags(ai_content)
                 print(f"[Final AI Response] Length: {len(ai_content) if ai_content else 0}")
 
                 # Check if final response is empty and retry if needed
@@ -1221,11 +1252,35 @@ def coach_chat():
         # Update Moorcheh index with new messages
         index_chat_history(user_id, new_messages)
 
+        # Generate TTS audio for the coach response
+        audio_data = None
+        if elevenlabs_client:
+            try:
+                audio_response = elevenlabs_client.text_to_speech.convert(
+                    text=ai_response,
+                voice_id="pFZP5JQG7iQjIQuC4Bku",  # Bill voice
+                model_id="eleven_turbo_v2_5",  # Fast model for chat
+                output_format="mp3_44100_128"
+            )
+
+                # Convert generator to bytes
+                audio_bytes = b"".join(audio_response)
+
+                # Convert to base64 for JSON response
+                import base64
+                audio_data = base64.b64encode(audio_bytes).decode('utf-8')
+
+                print(f"✓ Generated TTS audio for coach response ({len(audio_bytes)} bytes)")
+            except Exception as e:
+                print(f"✗ TTS generation failed: {e}")
+                # Continue without audio
+
         response_data = {
             "response": ai_response,
-            "context_used": bool(rag_context)
+            "context_used": bool(rag_context),
+            "audio": audio_data
         }
-        print(f"[Coach API] Returning response: {response_data}")
+        print(f"[Coach API] Returning response with audio: {len(audio_data) if audio_data else 0} bytes")
         return jsonify(response_data)
 
     except Exception as e:
