@@ -1,14 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { ChallengeCard } from '@/components/ChallengeCard';
-import { mockChallenges } from '@/data/mockChallenges';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Link } from 'react-router-dom';
-import { Plus, Trophy, Trash2 } from 'lucide-react';
+import { Plus, Trophy, Trash2, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { challengeAPI, Challenge as APIChallenge } from '@/lib/api';
+import { Challenge } from '@/types';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,36 +25,139 @@ import {
 export default function MyChallenges() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [enrolledChallenges, setEnrolledChallenges] = useState<string[]>(['1', '2']);
-  const [createdChallenges, setCreatedChallenges] = useState(
-    mockChallenges.filter(c => c.creatorId === 'user1')
-  );
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const enrolledList = mockChallenges.filter(c => enrolledChallenges.includes(c.id));
+  // Fetch user's challenges
+  useEffect(() => {
+    const fetchMyChallenges = async () => {
+      try {
+        console.log('Fetching my challenges...');
+        const response = await challengeAPI.getMyChallenges();
+        console.log('Fetched my challenges:', response);
+
+        // Transform API challenges to frontend format
+        const transformedChallenges: Challenge[] = [];
+
+        response.challenges.forEach((apiChallenge, index) => {
+          try {
+            // Handle repReward - can be either array [amount, perReps] or just a number
+            const repReward: any = {};
+            Object.entries(apiChallenge.repReward).forEach(([key, value]) => {
+              if (Array.isArray(value)) {
+                repReward[key] = { amount: value[0], perReps: value[1] };
+              } else {
+                repReward[key] = { amount: value as number, perReps: 1 };
+              }
+            });
+
+            const transformed: Challenge = {
+              id: apiChallenge._id,
+              name: apiChallenge.name,
+              creatorId: apiChallenge.creatorUserId,
+              creatorName: 'User',
+              description: apiChallenge.description,
+              enabledExercises: apiChallenge.enabledExercises as any,
+              userContributions: apiChallenge.contributions,
+              enrolledUsers: apiChallenge.participants,
+              repGoal: apiChallenge.repGoal as any,
+              repReward: repReward,
+              repRewardType: Object.values(apiChallenge.repRewardType)[0] || 'trees planted',
+              completionReward: apiChallenge.completionReward,
+              startDate: new Date(apiChallenge.startDate),
+              endDate: new Date(apiChallenge.endDate),
+              isCompleted: apiChallenge.completed,
+            };
+
+            transformedChallenges.push(transformed);
+          } catch (transformError) {
+            console.error(`Failed to transform challenge ${index + 1}:`, transformError, apiChallenge);
+          }
+        });
+
+        console.log('Total transformed my challenges:', transformedChallenges.length);
+        setChallenges(transformedChallenges);
+      } catch (error) {
+        console.error('Failed to fetch my challenges:', error);
+        toast({
+          title: 'Failed to load challenges',
+          description: 'Please try refreshing the page.',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchMyChallenges();
+    }
+  }, [user, toast]);
+
+  // Separate challenges into created and enrolled
+  const createdChallenges = challenges.filter(c => c.creatorId === user?.id);
+  const enrolledList = challenges.filter(c =>
+    c.creatorId !== user?.id && c.enrolledUsers.includes(user?.id || '')
+  );
   
   const now = new Date();
   const activeCreated = createdChallenges.filter(
-    c => now >= c.startDate && now <= c.endDate && !c.isCompleted
+    c => !c.isCompleted && now <= c.endDate
   );
   const pastCreated = createdChallenges.filter(
-    c => now > c.endDate || c.isCompleted
+    c => c.isCompleted || now > c.endDate
   );
 
-  const handleUnenroll = (challengeId: string) => {
-    setEnrolledChallenges(enrolledChallenges.filter(id => id !== challengeId));
-    toast({
-      title: 'Left challenge',
-      description: 'You have left the challenge.',
-    });
+  const handleUnenroll = async (challengeId: string) => {
+    try {
+      await challengeAPI.unenrollFromChallenge(challengeId);
+      setChallenges(challenges.filter(c => c.id !== challengeId));
+      toast({
+        title: 'Left challenge',
+        description: 'You have left the challenge.',
+      });
+    } catch (error) {
+      console.error('Failed to unenroll:', error);
+      toast({
+        title: 'Failed to leave challenge',
+        description: 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleDelete = (challengeId: string) => {
-    setCreatedChallenges(createdChallenges.filter(c => c.id !== challengeId));
-    toast({
-      title: 'Challenge deleted',
-      description: 'The challenge has been permanently deleted.',
-    });
+  const handleDelete = async (challengeId: string) => {
+    try {
+      await challengeAPI.deleteChallenge(challengeId);
+      setChallenges(challenges.filter(c => c.id !== challengeId));
+      toast({
+        title: 'Challenge deleted',
+        description: 'The challenge has been permanently deleted.',
+      });
+    } catch (error: any) {
+      console.error('Failed to delete challenge:', error);
+      toast({
+        title: 'Failed to delete challenge',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <main className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <span className="ml-2 text-muted-foreground">Loading your challenges...</span>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

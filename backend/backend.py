@@ -339,6 +339,52 @@ def get_challenges():
         print(f"✗ Error fetching challenges: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/challenges/my', methods=['GET'])
+@verify_token_decorator
+def get_my_challenges():
+    """Get challenges for the logged-in user (created by user or enrolled in)"""
+    try:
+        user_id_str = request.user_id
+
+        # Validate and convert user_id to ObjectId
+        try:
+            user_id = ObjectId(user_id_str)
+        except:
+            return jsonify({'error': 'Invalid user ID'}), 400
+
+        # Find challenges created by user OR where user is a participant
+        challenges_cursor = challenges_collection.find({
+            "$or": [
+                {"creatorUserId": user_id},
+                {"participants": user_id_str}
+            ]
+        })
+
+        challenges = []
+        for challenge in challenges_cursor:
+            # Serialize the challenge document
+            challenge_dict = serialize_doc(challenge)
+
+            # Convert dates to ISO format strings
+            if 'startDate' in challenge_dict:
+                challenge_dict['startDate'] = challenge['startDate'].isoformat()
+            if 'endDate' in challenge_dict:
+                challenge_dict['endDate'] = challenge['endDate'].isoformat()
+            if 'createdAt' in challenge_dict:
+                challenge_dict['createdAt'] = challenge['createdAt'].isoformat()
+
+            challenges.append(challenge_dict)
+
+        print(f"✓ Fetched {len(challenges)} challenges for user {user_id_str}")
+        for idx, ch in enumerate(challenges, 1):
+            print(f"  {idx}. {ch['name']} (ID: {ch['_id']})")
+
+        return jsonify({'challenges': challenges}), 200
+
+    except Exception as e:
+        print(f"✗ Error fetching user challenges: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/challenges/<challenge_id>', methods=['DELETE'])
 @verify_token_decorator
 def delete_challenge(challenge_id):

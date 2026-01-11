@@ -182,6 +182,11 @@ export const challengeAPI = {
     return handleResponse(response);
   },
 
+  async getMyChallenges(): Promise<{ challenges: Challenge[] }> {
+    const response = await authenticatedFetch('/challenges/my');
+    return handleResponse(response);
+  },
+
   async getChallenge(challengeId: string): Promise<Challenge> {
     const response = await authenticatedFetch(`/challenges/${challengeId}`);
     return handleResponse(response);
