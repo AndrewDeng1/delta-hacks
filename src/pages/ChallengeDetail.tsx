@@ -1,45 +1,112 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Navbar } from '@/components/Navbar';
 import { ExerciseSession } from '@/components/ExerciseSession';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { mockChallenges } from '@/data/mockChallenges';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { 
-  EXERCISE_LABELS, 
-  EXERCISE_ICONS, 
+import {
+  EXERCISE_LABELS,
+  EXERCISE_ICONS,
   ExerciseType,
-  SessionStats 
+  SessionStats,
+  Challenge
 } from '@/types';
-import { 
-  ArrowLeft, 
-  Calendar, 
-  Users, 
-  Trophy, 
-  Play, 
+import {
+  ArrowLeft,
+  Calendar,
+  Users,
+  Trophy,
+  Play,
   TreePine,
   Target,
   Trash2,
   LogOut,
-  ExternalLink
+  ExternalLink,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { challengeAPI } from '@/lib/api';
 
 export default function ChallengeDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user, updateUserStats } = useAuth();
   const { toast } = useToast();
+  const [challenge, setChallenge] = useState<Challenge | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showSession, setShowSession] = useState(false);
-  const [enrolled, setEnrolled] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  const challenge = mockChallenges.find(c => c.id === id);
+  // Fetch challenge data
+  useEffect(() => {
+    const fetchChallenge = async () => {
+      if (!id) return;
+
+      try {
+        console.log('Fetching challenge:', id);
+        const apiChallenge = await challengeAPI.getChallenge(id);
+        console.log('Fetched challenge:', apiChallenge);
+
+        // Handle repReward transformation
+        const repReward: any = {};
+        Object.entries(apiChallenge.repReward).forEach(([key, value]) => {
+          if (Array.isArray(value)) {
+            repReward[key] = { amount: value[0], perReps: value[1] };
+          } else {
+            repReward[key] = { amount: value as number, perReps: 1 };
+          }
+        });
+
+        const transformed: Challenge = {
+          id: apiChallenge._id,
+          name: apiChallenge.name,
+          creatorId: apiChallenge.creatorUserId,
+          creatorName: 'User',
+          description: apiChallenge.description,
+          enabledExercises: apiChallenge.enabledExercises as any,
+          userContributions: apiChallenge.contributions,
+          enrolledUsers: apiChallenge.participants,
+          repGoal: apiChallenge.repGoal as any,
+          repReward: repReward,
+          repRewardType: Object.values(apiChallenge.repRewardType)[0] || 'trees planted',
+          completionReward: apiChallenge.completionReward,
+          startDate: new Date(apiChallenge.startDate),
+          endDate: new Date(apiChallenge.endDate),
+          isCompleted: apiChallenge.completed,
+        };
+
+        setChallenge(transformed);
+      } catch (error) {
+        console.error('Failed to fetch challenge:', error);
+        toast({
+          title: 'Failed to load challenge',
+          description: 'Please try again.',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchChallenge();
+  }, [id, toast]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="container mx-auto px-4 py-12 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2 text-muted-foreground">Loading challenge...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!challenge) {
     return (
@@ -59,8 +126,11 @@ export default function ChallengeDetail() {
   const isActive = now >= challenge.startDate && now <= challenge.endDate && !challenge.isCompleted;
   const daysLeft = Math.ceil((challenge.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-  // Check if user owns this challenge (mock check)
+  // Check if user owns this challenge
   const isOwner = user?.id === challenge.creatorId;
+
+  // Check if user is enrolled
+  const enrolled = challenge.enrolledUsers.includes(user?.id || '');
 
   // Calculate total reps per exercise
   const getTotalReps = (exercise: ExerciseType) => {
@@ -90,30 +160,81 @@ export default function ChallengeDetail() {
     { username: 'GreenWarrior', reps: { jumping_jacks: 280, squats: 220, high_knees: 150 } },
   ];
 
-  const handleEnroll = () => {
-    setEnrolled(true);
-    toast({
-      title: 'Enrolled!',
-      description: `You've joined "${challenge.name}"`,
-    });
+  const handleEnroll = async () => {
+    if (!challenge || !id) return;
+
+    try {
+      await challengeAPI.enrollInChallenge(id);
+
+      // Update local state
+      setChallenge({
+        ...challenge,
+        enrolledUsers: [...challenge.enrolledUsers, user?.id || ''],
+      });
+
+      toast({
+        title: 'Enrolled!',
+        description: `You've joined "${challenge.name}"`,
+      });
+    } catch (error: any) {
+      console.error('Failed to enroll:', error);
+      toast({
+        title: 'Failed to enroll',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleLeaveChallenge = () => {
-    setEnrolled(false);
-    setShowLeaveDialog(false);
-    toast({
-      title: 'Left Challenge',
-      description: 'Your contributions have been removed.',
-    });
+  const handleLeaveChallenge = async () => {
+    if (!challenge || !id) return;
+
+    try {
+      await challengeAPI.unenrollFromChallenge(id);
+
+      // Update local state
+      setChallenge({
+        ...challenge,
+        enrolledUsers: challenge.enrolledUsers.filter(uid => uid !== user?.id),
+      });
+
+      setShowLeaveDialog(false);
+      toast({
+        title: 'Left Challenge',
+        description: 'Your contributions have been removed.',
+      });
+    } catch (error: any) {
+      console.error('Failed to unenroll:', error);
+      setShowLeaveDialog(false);
+      toast({
+        title: 'Failed to leave challenge',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleDeleteChallenge = () => {
-    setShowDeleteDialog(false);
-    toast({
-      title: 'Challenge Deleted',
-      description: 'The challenge has been permanently deleted.',
-    });
-    navigate('/my-challenges');
+  const handleDeleteChallenge = async () => {
+    if (!id) return;
+
+    try {
+      await challengeAPI.deleteChallenge(id);
+
+      setShowDeleteDialog(false);
+      toast({
+        title: 'Challenge Deleted',
+        description: 'The challenge has been permanently deleted.',
+      });
+      navigate('/my-challenges');
+    } catch (error: any) {
+      console.error('Failed to delete challenge:', error);
+      setShowDeleteDialog(false);
+      toast({
+        title: 'Failed to delete challenge',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleSessionEnd = (stats: SessionStats) => {

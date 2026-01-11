@@ -434,9 +434,23 @@ def get_challenge(challenge_id):
         if not challenge:
             return jsonify({'error': 'Challenge not found'}), 404
 
-        return jsonify(serialize_doc(challenge))
+        # Serialize the challenge document
+        challenge_dict = serialize_doc(challenge)
+
+        # Convert dates to ISO format strings
+        if 'startDate' in challenge_dict:
+            challenge_dict['startDate'] = challenge['startDate'].isoformat()
+        if 'endDate' in challenge_dict:
+            challenge_dict['endDate'] = challenge['endDate'].isoformat()
+        if 'createdAt' in challenge_dict:
+            challenge_dict['createdAt'] = challenge['createdAt'].isoformat()
+
+        print(f"✓ Fetched challenge: {challenge_dict['name']} (ID: {challenge_dict['_id']})")
+
+        return jsonify(challenge_dict)
 
     except Exception as e:
+        print(f"✗ Error fetching challenge: {e}")
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================
