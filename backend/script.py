@@ -15,7 +15,7 @@ import math
 import time
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple, List
 
 # ============================================================================
 # CONFIGURATION
@@ -175,6 +175,10 @@ class ExerciseDetector:
     reload_counter: int = 0
     RELOAD_INTERVAL: int = 30
 
+    # Warning counter (print visibility warnings every 30 frames to avoid spam)
+    warning_counter: int = 0
+    WARNING_INTERVAL: int = 30
+
     def __post_init__(self):
         if self.rep_counts is None:
             self.rep_counts = {
@@ -183,6 +187,38 @@ class ExerciseDetector:
                 "high_knees": 0
             }
         self.load_target_exercise()
+
+    def check_landmarks_visible(self, landmarks, required_indices, min_visibility=0.5) -> Tuple[bool, List[str]]:
+        """
+        Check if required landmarks are visible
+        Returns: (all_visible: bool, missing_landmarks: list)
+        """
+        missing = []
+        landmark_names = {
+            PoseLandmark.LEFT_SHOULDER: "Left Shoulder",
+            PoseLandmark.RIGHT_SHOULDER: "Right Shoulder",
+            PoseLandmark.LEFT_ELBOW: "Left Elbow",
+            PoseLandmark.RIGHT_ELBOW: "Right Elbow",
+            PoseLandmark.LEFT_WRIST: "Left Wrist",
+            PoseLandmark.RIGHT_WRIST: "Right Wrist",
+            PoseLandmark.LEFT_HIP: "Left Hip",
+            PoseLandmark.RIGHT_HIP: "Right Hip",
+            PoseLandmark.LEFT_KNEE: "Left Knee",
+            PoseLandmark.RIGHT_KNEE: "Right Knee",
+            PoseLandmark.LEFT_ANKLE: "Left Ankle",
+            PoseLandmark.RIGHT_ANKLE: "Right Ankle",
+        }
+
+        for idx in required_indices:
+            if idx < len(landmarks):
+                landmark = landmarks[idx]
+                # Check visibility score (MediaPipe provides this)
+                if hasattr(landmark, 'visibility') and landmark.visibility < min_visibility:
+                    missing.append(landmark_names.get(idx, f"Landmark {idx}"))
+            else:
+                missing.append(landmark_names.get(idx, f"Landmark {idx}"))
+
+        return len(missing) == 0, missing
 
     def detect_jumping_jack(self, landmarks) -> bool:
         """Detect jumping jack and return True if rep completed"""
@@ -322,8 +358,43 @@ class ExerciseDetector:
                 print(f"[TARGET] Switched to: {self.target_exercise.value}")
             self.reload_counter = 0
 
-        # Only detect the target exercise
+        # Only detect the target exercise - but first check if required joints are visible
         rep_completed = False
+
+        # Define required landmarks for each exercise
+        required_landmarks = {
+            ExerciseType.JUMPING_JACK: [
+                PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
+                PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
+                PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST,
+                PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP
+            ],
+            ExerciseType.SQUAT: [
+                PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP,
+                PoseLandmark.LEFT_KNEE, PoseLandmark.RIGHT_KNEE,
+                PoseLandmark.LEFT_ANKLE, PoseLandmark.RIGHT_ANKLE
+            ],
+            ExerciseType.HIGH_KNEES: [
+                PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP,
+                PoseLandmark.LEFT_KNEE, PoseLandmark.RIGHT_KNEE,
+                PoseLandmark.LEFT_ANKLE, PoseLandmark.RIGHT_ANKLE
+            ]
+        }
+
+        # Check if required landmarks are visible for current exercise
+        if self.target_exercise in required_landmarks:
+            all_visible, missing = self.check_landmarks_visible(landmarks, required_landmarks[self.target_exercise])
+
+            if not all_visible:
+                # Only print warning every WARNING_INTERVAL frames to avoid spam
+                self.warning_counter += 1
+                if self.warning_counter >= self.WARNING_INTERVAL:
+                    print(f"⚠ Cannot detect {self.target_exercise.value} - Missing: {', '.join(missing)}")
+                    self.warning_counter = 0
+                return
+            else:
+                # Reset warning counter when all landmarks are visible again
+                self.warning_counter = 0
 
         if self.target_exercise == ExerciseType.JUMPING_JACK:
             rep_completed = self.detect_jumping_jack(landmarks)

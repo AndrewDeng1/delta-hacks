@@ -27,6 +27,8 @@ export function ExerciseSession({ challenge, onEnd, onClose, onChallengeUpdate }
   const [popExercise, setPopExercise] = useState<ExerciseType | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<ExerciseType | null>(null);
   const [backendAvailable, setBackendAvailable] = useState(true);
+  const [showRewardPop, setShowRewardPop] = useState(false);
+  const previousContributionsRef = useRef(0);
 
   // Calculate session contributions
   const calculateSessionContributions = () => {
@@ -206,6 +208,19 @@ export function ExerciseSession({ challenge, onEnd, onClose, onChallengeUpdate }
 
     return () => clearInterval(pollInterval);
   }, [cameraActive, selectedExercise, challenge.enabledExercises, challenge.id]);
+
+  // Watch for contribution increases and trigger pop-up (same pattern as rep counter)
+  useEffect(() => {
+    const currentContributions = calculateSessionContributions();
+
+    if (previousContributionsRef.current > 0 && currentContributions > previousContributionsRef.current) {
+      // Contribution increased! Show pop-up animation
+      setShowRewardPop(true);
+      setTimeout(() => setShowRewardPop(false), 1000);
+    }
+
+    previousContributionsRef.current = currentContributions;
+  }, [sessionReps]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -435,7 +450,11 @@ export function ExerciseSession({ challenge, onEnd, onClose, onChallengeUpdate }
                 <div className="pt-3 border-t">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Session Contribution</span>
-                    <span className="font-display text-xl font-bold text-gradient">
+                    <span
+                      className={`font-display text-xl font-bold text-gradient transition-all duration-300 ${
+                        showRewardPop ? 'animate-counter-pop scale-125' : ''
+                      }`}
+                    >
                       {sessionContributions} {challenge.repRewardType}
                     </span>
                   </div>
@@ -484,7 +503,11 @@ export function ExerciseSession({ challenge, onEnd, onClose, onChallengeUpdate }
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Total Contribution</span>
                     <div className="text-right">
-                      <div className="font-display text-xl font-bold text-gradient">
+                      <div
+                        className={`font-display text-xl font-bold text-gradient transition-all duration-300 ${
+                          showRewardPop ? 'animate-counter-pop scale-125' : ''
+                        }`}
+                      >
                         {communityContributions + sessionContributions}
                       </div>
                       {sessionContributions > 0 && (
