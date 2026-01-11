@@ -442,12 +442,24 @@ class ExerciseDetector:
         return rep_completed
 
     def detect_lateral_raise(self, landmarks) -> bool:
-        """Detect lateral arm raise (one arm at a time) using wrist-shoulder-hip angle
+        """Detect lateral arm raise - BOTH ARMS must move together
         Requirements:
-        - Must see shoulders, wrists, and hips
-        - Sufficient range of motion (50+ degrees between up and down positions)
-        - Each arm tracked independently
+        - Must see shoulders, wrists, and hips for BOTH sides
+        - BOTH arms must raise up and lower down together
+        - Don't count if any required joints are out of frame
         """
+        # Check visibility of required landmarks FIRST
+        required = [PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
+                   PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST,
+                   PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP]
+        all_visible, missing = self.check_landmarks_visible(landmarks, required)
+
+        if not all_visible:
+            # Reset state if we can't see required joints
+            self.left_arm_was_up = False
+            self.right_arm_was_up = False
+            return False
+
         # Get relevant landmarks
         left_shoulder = landmarks[PoseLandmark.LEFT_SHOULDER]
         right_shoulder = landmarks[PoseLandmark.RIGHT_SHOULDER]
@@ -456,44 +468,53 @@ class ExerciseDetector:
         left_hip = landmarks[PoseLandmark.LEFT_HIP]
         right_hip = landmarks[PoseLandmark.RIGHT_HIP]
 
-        # Calculate angles between hip-shoulder-wrist for each arm
+        # Calculate angles: hip-shoulder-wrist for each arm
         left_angle = calculate_angle(left_hip, left_shoulder, left_wrist)
         right_angle = calculate_angle(right_hip, right_shoulder, right_wrist)
 
-        # HYSTERESIS THRESHOLDS with proper range of motion
-        # When arm is DOWN at side: angle ~170-180° (nearly straight line from hip to wrist)
-        # When arm is RAISED to horizontal: angle ~90-100° (wrist perpendicular to body)
-        # Ensure at least 50° range of motion between thresholds
-        UP_THRESHOLD = 110      # Angle must be LESS than this when arm is raised horizontal
-        DOWN_THRESHOLD = 160    # Angle must be MORE than this when arm is down at side
+        print(f"[LATERAL RAISE DEBUG] L={left_angle:.1f}° R={right_angle:.1f}°")
 
-        # Range of motion check: 160 - 110 = 50° minimum
+        # Thresholds:
+        # Arms DOWN (at sides): ~170-180° (nearly straight line hip-shoulder-wrist)
+        # Arms SLIGHTLY UP: ~130-145° (just raise arms a bit, like 30-45° from vertical)
+        # Arms OVERHEAD: < 100° (too high, not a lateral raise)
+        UP_THRESHOLD = 80      # Both arms must be LESS than this (raised position)
+        DOWN_THRESHOLD = 45    # Both arms must be MORE than this when lowered
+        OVERHEAD_THRESHOLD = 145  # If below this, arms are overhead (reset state)
 
         rep_completed = False
 
-        # LEFT ARM: Check for complete cycle (arm up → arm down)
-        if left_angle < UP_THRESHOLD and not self.left_arm_was_up:
-            # Arm is raised UP to horizontal
-            self.left_arm_was_up = True
-            print(f"[LATERAL RAISE] Left arm UP: hip-shoulder-wrist angle={left_angle:.1f}°")
-
-        elif left_angle > DOWN_THRESHOLD and self.left_arm_was_up:
-            # Arm is DOWN at side - CYCLE COMPLETE
+        # Check if arms are TOO HIGH (overhead) - reset state
+        if left_angle < OVERHEAD_THRESHOLD or right_angle < OVERHEAD_THRESHOLD:
+            if self.left_arm_was_up:
+                print(f"[LATERAL RAISE] Arms overhead (L={left_angle:.1f}° R={right_angle:.1f}°) - resetting state")
             self.left_arm_was_up = False
-            rep_completed = True
-            print(f"[LATERAL RAISE] Left arm DOWN: hip-shoulder-wrist angle={left_angle:.1f}° → REP!")
+            self.right_arm_was_up = False
+            return False
 
-        # RIGHT ARM: Check for complete cycle (arm up → arm down)
-        if right_angle < UP_THRESHOLD and not self.right_arm_was_up:
-            # Arm is raised UP to horizontal
+        # Check if BOTH arms are UP (in proper lateral raise range)
+        both_arms_up = (left_angle > UP_THRESHOLD and right_angle > UP_THRESHOLD)
+
+        # Check if BOTH arms are DOWN
+        both_arms_down = (left_angle < DOWN_THRESHOLD and right_angle < DOWN_THRESHOLD)
+
+        # Debug: print angles every few frames to help tune thresholds
+        if self.reload_counter % 15 == 0:  # Print every 15 frames (~0.5 seconds)
+            print(f"[LATERAL RAISE DEBUG] L={left_angle:.1f}° R={right_angle:.1f}° (Up<{UP_THRESHOLD}°, Down>{DOWN_THRESHOLD}°)")
+
+        # State machine: both arms must go UP then DOWN together
+        if both_arms_up and not self.left_arm_was_up:
+            # BOTH arms raised slightly
+            self.left_arm_was_up = True
             self.right_arm_was_up = True
-            print(f"[LATERAL RAISE] Right arm UP: hip-shoulder-wrist angle={right_angle:.1f}°")
+            print(f"[LATERAL RAISE] Both arms UP: L={left_angle:.1f}° R={right_angle:.1f}°")
 
-        elif right_angle > DOWN_THRESHOLD and self.right_arm_was_up:
-            # Arm is DOWN at side - CYCLE COMPLETE
+        elif both_arms_down and self.left_arm_was_up:
+            # BOTH arms lowered to sides - REP COMPLETE
+            self.left_arm_was_up = False
             self.right_arm_was_up = False
             rep_completed = True
-            print(f"[LATERAL RAISE] Right arm DOWN: hip-shoulder-wrist angle={right_angle:.1f}° → REP!")
+            print(f"[LATERAL RAISE] Both arms DOWN: L={left_angle:.1f}° R={right_angle:.1f}° → REP!")
 
         return rep_completed
 
