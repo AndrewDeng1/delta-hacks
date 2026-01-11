@@ -1,0 +1,11 @@
+opencv-python
+mediapipe
+numpy
+pymongo[srv]==3.12
+flask
+flask-cors
+fastapi
+uvicorn
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
