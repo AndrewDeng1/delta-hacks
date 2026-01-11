@@ -1,0 +1,615 @@
+{
+  "sliding_window": [
+    {
+      "timestamp": 1768136655.389152,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 165.7,
+        "right_elbow_angle": 143.9
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136655.2182882,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 51.1,
+        "right_elbow_angle": 11.6
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136655.052018,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 30.5,
+        "right_elbow_angle": 7.3
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136654.893993,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 34.1,
+        "right_elbow_angle": 4.8
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136621.935609,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 66.5,
+        "right_elbow_angle": 46.5
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136596.17829,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 163.0,
+        "right_elbow_angle": 104.1
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136595.919265,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 34.1,
+        "right_elbow_angle": 106.5
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136594.05056,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 78.1,
+        "right_elbow_angle": 54.0
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136593.885699,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 92.8,
+        "right_elbow_angle": 66.2
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136593.718841,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 65.7,
+        "right_elbow_angle": 77.8
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136593.55321,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 50.4,
+        "right_elbow_angle": 93.5
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136593.382623,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 69.8,
+        "right_elbow_angle": 54.8
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136593.2187252,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 58.7,
+        "right_elbow_angle": 52.1
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136592.7174091,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 165.8,
+        "right_elbow_angle": 131.0
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136592.551679,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 48.7,
+        "right_elbow_angle": 132.8
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136592.376719,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 98.6,
+        "right_elbow_angle": 43.9
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136592.217988,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 50.2,
+        "right_elbow_angle": 10.6
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136592.050901,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 47.8,
+        "right_elbow_angle": 13.0
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136591.885797,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 65.8,
+        "right_elbow_angle": 53.4
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136591.7170932,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 82.5,
+        "right_elbow_angle": 81.0
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136591.552014,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 67.0,
+        "right_elbow_angle": 42.9
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136591.384984,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 72.2,
+        "right_elbow_angle": 80.3
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136591.209525,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 68.8,
+        "right_elbow_angle": 59.4
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136591.049885,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 26.4,
+        "right_elbow_angle": 22.0
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136590.8876522,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 19.1,
+        "right_elbow_angle": 123.3
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136590.717962,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 37.7,
+        "right_elbow_angle": 64.2
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136586.317964,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 104.4,
+        "right_elbow_angle": 8.9
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136586.1510808,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 86.3,
+        "right_elbow_angle": 53.3
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136585.984225,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 54.3,
+        "right_elbow_angle": 27.3
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    },
+    {
+      "timestamp": 1768136579.187426,
+      "exercise_type": "bicep_curls",
+      "angles": {
+        "left_elbow_angle": 115.5,
+        "right_elbow_angle": 84.1
+      },
+      "target_angles": {
+        "left_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "right_elbow_angle": {
+          "contracted": 45,
+          "extended": 170
+        },
+        "description": "Curled: 45\u00b0, Extended: 170\u00b0"
+      },
+      "missing": []
+    }
+  ],
+  "metadata": {
+    "exercise_type": "bicep_curls",
+    "rep_count": 188,
+    "last_rep_time": 33.32045006752014,
+    "last_feedback_time": 4624.776464939117,
+    "timestamp": 1768136655.389152,
+    "missing_coords": [],
+    "full_window_size": 150,
+    "sampled_window_size": 30,
+    "window_duration_seconds": 76.40527415275574
+  }
+}
